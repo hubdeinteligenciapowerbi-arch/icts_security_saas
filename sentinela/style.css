@@ -1,0 +1,151 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: Arial, sans-serif;
+}
+
+#sidebar {
+    width: 320px;
+    background: #fff;
+    overflow-y: auto;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+}
+
+#sidebar:not(.-translate-x-full) {
+    transform: translateX(0);
+}
+
+#closeMenuBtn {
+    background: transparent;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+}
+
+.filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.filters input,
+.filters select,
+.filters button {
+    padding: 0.5rem;
+    font-size: 1rem;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+.filters button {
+    cursor: pointer;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.filters button:hover {
+    background-color: #0056b3;
+}
+
+#overlay {
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    z-index: 40;
+}
+
+#overlay:not(.hidden) {
+    opacity: 1;
+}
+
+#mapLoader {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(255,255,255,0.9);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    z-index: 1000;
+}
+
+#aiAnalysisCard {
+    max-width: 320px;
+    background: white;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    padding: 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 900;
+}
+
+#notificationModal > div {
+    max-width: 360px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    background: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    text-align: center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+#modalCloseBtn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#modalCloseBtn:hover {
+    background: #0056b3;
+}
+
+#openMenuBtn,
+#toggleViewBtn,
+#geoBtn,
+#voiceSearchBtn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0.5rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+#openMenuBtn {
+    top: 1rem;
+    left: 1rem;
+    position: fixed;
+    z-index: 100;
+}
+
+#toggleViewBtn {
+    bottom: 5rem;
+    right: 1rem;
+    position: fixed;
+    z-index: 100;
+}
+
+#geoBtn {
+    bottom: 3.5rem;
+    right: 1rem;
+    position: fixed;
+    z-index: 100;
+}
+
+#voiceSearchBtn {
+    bottom: 2rem;
+    right: 1rem;
+    position: fixed;
+    z-index: 100;
+}
