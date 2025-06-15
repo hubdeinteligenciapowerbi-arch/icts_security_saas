@@ -1,4 +1,3 @@
-// Referências ao DOM
 const selectMunicipio = document.getElementById('municipio');
 const selectBairro = document.getElementById('regiao');
 const selectPeriodo = document.getElementById('periodo');
@@ -9,19 +8,24 @@ const btnLocalizacao = document.getElementById('btn-localizacao');
 const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-button');
 const voiceStatus = document.getElementById('voice-status');
+const darkModeToggle = document.getElementById('dark-mode-toggle');
 
 let municipiosAPI = [];
 let regioesAPI = [];
 let marcadorMapa = null;
 const anoBase = 2025;
 
-// Mapa
 const map = L.map('map').setView([-23.55052, -46.633308], 10);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: 'Map data © OpenStreetMap contributors'
 }).addTo(map);
 
-// Funções auxiliares
+darkModeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  const isDark = document.body.classList.contains('dark-mode');
+  darkModeToggle.textContent = isDark ? "☀️" : "🌙";
+});
+
 function normalizarTexto(texto) {
   return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -31,7 +35,6 @@ function showInfo(msg) {
   infoMessage.classList.remove("d-none");
 }
 
-// Carregamento dos filtros
 async function carregarBairros() {
   try {
     showInfo("Carregando bairros...");
@@ -98,7 +101,6 @@ function carregarPeriodos() {
   });
 }
 
-// Eventos de mudança
 selectBairro.addEventListener('change', () => {
   const codRegiaoSelecionada = selectBairro.value;
   if (!codRegiaoSelecionada) {
@@ -179,7 +181,6 @@ async function buscarOcorrencias() {
   }
 }
 
-// Centraliza no mapa
 async function centralizarNoMapa(endereco) {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(endereco)}&format=json&limit=1`;
@@ -197,7 +198,6 @@ async function centralizarNoMapa(endereco) {
   }
 }
 
-// Botão limpar
 btnLimpar.addEventListener("click", () => {
   selectMunicipio.value = "";
   selectBairro.value = "";
@@ -208,7 +208,6 @@ btnLimpar.addEventListener("click", () => {
   if (marcadorMapa) map.removeLayer(marcadorMapa);
 });
 
-// Localização atual
 btnLocalizacao.addEventListener("click", () => {
   if (!navigator.geolocation) return showInfo("Geolocalização não suportada.");
 
@@ -234,7 +233,6 @@ btnLocalizacao.addEventListener("click", () => {
   }, () => showInfo("Não foi possível obter a localização."));
 });
 
-// Filtro de busca
 function aplicarFiltroPesquisa() {
   const termo = normalizarTexto(searchInput.value.trim());
   if (!termo) {
@@ -261,13 +259,11 @@ function aplicarFiltroPesquisa() {
   showInfo("Local não encontrado. Verifique o nome digitado.");
 }
 
-// Pesquisa por texto
 searchButton.addEventListener("click", aplicarFiltroPesquisa);
 searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") aplicarFiltroPesquisa();
 });
 
-// 🔊 Pesquisa por voz
 function iniciarPesquisaVoz() {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     showInfo("Reconhecimento de voz não suportado neste navegador.");
@@ -294,7 +290,7 @@ function iniciarPesquisaVoz() {
 
   recognition.onerror = (event) => {
     console.error("Erro no reconhecimento de voz:", event.error);
-    showInfo("Erro no reconhecimento de voz.");
+    showInfo(`Erro no reconhecimento de voz: ${event.error}`);
     voiceStatus.textContent = "";
   };
 
