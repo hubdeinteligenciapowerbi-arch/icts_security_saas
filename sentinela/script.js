@@ -9,6 +9,9 @@ const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-button');
 const voiceStatus = document.getElementById('voice-status');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
+const voiceButton = document.getElementById('voice-button');
+document.getElementById('btn-insights').addEventListener('click', gerarInsights);
+
 
 let municipiosAPI = [];
 let regioesAPI = [];
@@ -117,7 +120,6 @@ selectBairro.addEventListener('change', () => {
 selectMunicipio.addEventListener("change", buscarOcorrencias);
 selectPeriodo.addEventListener("change", buscarOcorrencias);
 
-// Consulta principal
 async function buscarOcorrencias() {
   showInfo("Buscando dados de segurança pública...");
   dadosSegurancaDiv.textContent = "";
@@ -158,14 +160,22 @@ async function buscarOcorrencias() {
       return;
     }
 
-    const somaCampo = nome => json.resumo[nome] || 0;
+    const camposResumo = {
+      "Total Mortes": ["HOMICÍDIO DOLOSO (2)", "LATROCÍNIO", "LESÃO CORPORAL SEGUIDA DE MORTE"],
+      "Total Homicídios": ["HOMICÍDIO DOLOSO (2)"],
+      "Total Latrocínios": ["LATROCÍNIO"],
+      "Total Roubo de Veículos": ["ROUBO DE VEÍCULO"],
+      "Total Furtos": ["FURTO - OUTROS", "FURTO DE VEÍCULO"]
+    };
+
+    function somaCampos(lista) {
+      return lista.reduce((acc, nome) => acc + (json.resumo[nome] || 0), 0);
+    }
+
     dadosSegurancaDiv.innerHTML = `
       <strong>Resumo das Ocorrências em ${anoSelecionado}:</strong><br>
-      Total Mortes: ${somaCampo("TOTAL_MORTES")}<br>
-      Total Homicídios: ${somaCampo("HOMICIDIOS")}<br>
-      Total Latrocínios: ${somaCampo("LATROCINIOS")}<br>
-      Total Roubo de Veículos: ${somaCampo("ROUBO_VEICULOS")}<br>
-      Total Furtos: ${somaCampo("FURTOS")}
+      ${Object.entries(camposResumo).map(([label, campos]) =>
+        `${label}: ${somaCampos(campos)}<br>`).join("")}
     `;
 
     if (selectMunicipio.value) {
@@ -180,6 +190,7 @@ async function buscarOcorrencias() {
     showInfo("Erro ao buscar dados de segurança pública.");
   }
 }
+
 
 async function centralizarNoMapa(endereco) {
   try {
@@ -264,6 +275,42 @@ searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") aplicarFiltroPesquisa();
 });
 
+
+async function gerarInsights() {
+  try {
+    const resumo = {
+      "HOMICÍDIO DOLOSO (2)": 839,
+      "LATROCÍNIO": 51,
+      "FURTO DE VEÍCULO": 200
+      // ... os outros campos 
+    };
+
+    const res = await fetch('http://localhost:8000/insights', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(resumo)
+    });
+
+    if (!res.ok) throw new Error('Erro na geração de insights');
+
+    const data = await res.json();
+    console.log("Insights:", data.insights);
+
+    dadosSegurancaDiv.innerHTML += `
+      <br><strong>Insights de Segurança Pública:</strong><br>
+      <pre>${data.insights}</pre>
+    `;
+  } catch (error) {
+    console.error(error);
+    showInfo("Erro ao gerar insights de segurança.");
+  }
+}
+
+
+voiceButton.addEventListener("click", iniciarPesquisaVoz);
+
 function iniciarPesquisaVoz() {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     showInfo("Reconhecimento de voz não suportado neste navegador.");
@@ -278,7 +325,7 @@ function iniciarPesquisaVoz() {
 
   recognition.onstart = () => {
     voiceStatus.textContent = "🎤 Ouvindo... diga o nome do município ou região.";
-    document.getElementById("voice-button").disabled = true;
+    voiceButton.disabled = true;
   };
 
   recognition.onresult = (event) => {
@@ -295,7 +342,7 @@ function iniciarPesquisaVoz() {
   };
 
   recognition.onend = () => {
-    document.getElementById("voice-button").disabled = false;
+    voiceButton.disabled = false;
     setTimeout(() => voiceStatus.textContent = "", 4000);
   };
 
@@ -308,3 +355,4 @@ function iniciarPesquisaVoz() {
   carregarPeriodos();
   buscarOcorrencias();
 })();
+

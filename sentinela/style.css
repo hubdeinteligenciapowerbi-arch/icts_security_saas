@@ -31,6 +31,9 @@ html, body {
 .sidebar .btn {
   font-weight: 500;
 }
+.sidebar .sidebar-logo {
+  margin-block: 16px;
+}
 
 body.dark-mode {
   background-color: #121212;
