@@ -10,8 +10,8 @@ const searchButton = document.getElementById('search-button');
 const voiceStatus = document.getElementById('voice-status');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 const voiceButton = document.getElementById('voice-button');
-document.getElementById('btn-insights').addEventListener('click', gerarInsights);
-
+const btnInsights = document.getElementById('btn-insights');
+btnInsights.addEventListener('click', gerarInsights);
 
 let municipiosAPI = [];
 let regioesAPI = [];
@@ -36,6 +36,14 @@ function normalizarTexto(texto) {
 function showInfo(msg) {
   infoMessage.textContent = msg || "";
   infoMessage.classList.remove("d-none");
+}
+
+function verificarHabilitarInsights() {
+  if (selectMunicipio.value || selectBairro.value) {
+    btnInsights.disabled = false;
+  } else {
+    btnInsights.disabled = true;
+  }
 }
 
 async function carregarBairros() {
@@ -114,10 +122,15 @@ selectBairro.addEventListener('change', () => {
     popularMunicipios(filtrados);
     showInfo(`Mostrando municípios da região ${codRegiaoSelecionada}.`);
   }
+  verificarHabilitarInsights();
   buscarOcorrencias();
 });
 
-selectMunicipio.addEventListener("change", buscarOcorrencias);
+selectMunicipio.addEventListener("change", () => {
+  verificarHabilitarInsights();
+  buscarOcorrencias();
+});
+
 selectPeriodo.addEventListener("change", buscarOcorrencias);
 
 async function buscarOcorrencias() {
@@ -191,7 +204,6 @@ async function buscarOcorrencias() {
   }
 }
 
-
 async function centralizarNoMapa(endereco) {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(endereco)}&format=json&limit=1`;
@@ -215,6 +227,7 @@ btnLimpar.addEventListener("click", () => {
   selectPeriodo.value = "";
   searchInput.value = "";
   dadosSegurancaDiv.innerHTML = "";
+  verificarHabilitarInsights();
   showInfo("Filtros limpos.");
   if (marcadorMapa) map.removeLayer(marcadorMapa);
 });
@@ -275,35 +288,67 @@ searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") aplicarFiltroPesquisa();
 });
 
-
 async function gerarInsights() {
+  if (btnInsights.disabled) {
+    showInfo("Escolha primeiro um município ou região para prosseguir.");
+    return;
+  }
+
+  const container = document.getElementById('insights-message');
+  const content = container.querySelector('.insights-content');
+  container.classList.add('d-none');
+  content.innerHTML = '';
+
   try {
     const resumo = {
       "HOMICÍDIO DOLOSO (2)": 839,
       "LATROCÍNIO": 51,
       "FURTO DE VEÍCULO": 200
-      // ... os outros campos 
     };
 
     const res = await fetch('http://localhost:8000/insights', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(resumo)
     });
-
-    if (!res.ok) throw new Error('Erro na geração de insights');
+    if (!res.ok) throw new Error();
 
     const data = await res.json();
-    console.log("Insights:", data.insights);
+    const texto = data.insights;
 
-    dadosSegurancaDiv.innerHTML += `
-      <br><strong>Insights de Segurança Pública:</strong><br>
-      <pre>${data.insights}</pre>
-    `;
-  } catch (error) {
-    console.error(error);
+    const linhas = texto.split('\n');
+    let html = '';
+    linhas.forEach(line => {
+      if (line.startsWith('**Insight')) {
+        html += `<h5 style="margin:14px 0 6px; color:#dc3545;">${line.replace(/\*\*/g,'')}</h5>`;
+      }
+      else if (line.startsWith('* **')) {
+        const partes = line.match(/\*\s\*\*(.+?)\*\*:(.+)/);
+        if (partes) {
+          html += `<ul><li><strong>${partes[1]}:</strong>${partes[2].trim()}</li></ul>`;
+        }
+      }
+      else if (line.startsWith('* ')) {
+        html += `<ul><li>${line.replace(/^\*\s/, '')}</li></ul>`;
+      }
+      else {
+        html += `<p>${line}</p>`;
+      }
+    });
+
+    content.innerHTML = html;
+    container.classList.remove('d-none');
+
+    container.querySelector('.close-btn')
+      .onclick = () => container.classList.add('d-none');
+
+    document.addEventListener('click', e => {
+      if (!container.contains(e.target) && e.target !== btnInsights) {
+        container.classList.add('d-none');
+      }
+    }, { once: true });
+
+  } catch {
     showInfo("Erro ao gerar insights de segurança.");
   }
 }
@@ -350,9 +395,9 @@ function iniciarPesquisaVoz() {
 }
 
 (async function inicializar() {
+  btnInsights.disabled = true;
   await carregarBairros();
   await carregarMunicipios();
   carregarPeriodos();
   buscarOcorrencias();
 })();
-

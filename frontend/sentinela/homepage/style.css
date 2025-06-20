@@ -223,6 +223,124 @@ body.dark-mode .alert {
   z-index: 100;
 }
 
+#btn-insights {
+  background: linear-gradient(45deg, #6a11cb, #2575fc);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(37, 117, 252, 0.5);
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+  display: block;
+}
+
+.insights-message {
+  position: absolute;
+  top: 110%; 
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #ffffffdd; 
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 0.9rem;
+  color: #222;
+  line-height: 1.4;
+  z-index: 2000;
+  transition: opacity 0.3s ease;
+  opacity: 1;
+  white-space: normal;
+  text-align: left;
+}
+
+.d-none {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+#btn-insights:hover {
+  background: linear-gradient(45deg, #2575fc, #6a11cb);
+  box-shadow: 0 6px 20px rgba(106, 17, 203, 0.7);
+  transform: scale(1.05);
+}
+
+.insights-message {
+  position: absolute;
+  top: 140%;                
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fff;            
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+  padding: 20px 24px;
+  font-family: 'Segoe UI', sans-serif;
+  color: #333;
+  line-height: 1.5;
+  z-index: 2000;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 1;
+}
+
+.insights-message.d-none {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+  pointer-events: none;
+}
+
+.insights-message h4 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  color: #2575fc;
+}
+
+.insights-message .close-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: #999;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.insights-message .close-btn:hover {
+  color: #555;
+}
+
+.insights-content p {
+  margin: 0 0 10px;
+}
+
+.insights-content ul {
+  margin: 0 0 10px 16px;
+  padding: 0;
+  list-style: disc;
+}
+
+.insights-content li {
+  margin-bottom: 6px;
+}
+
 #voiceSearchBtn {
   bottom: 2rem;
   right: 1rem;
