@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 
-# Função de Normalização 
 def normalizar_str(s: str) -> str:
     if not isinstance(s, str):
         return ""
@@ -21,22 +20,16 @@ def normalizar_str(s: str) -> str:
         .decode('utf-8')\
         .lower().strip()
 
-# Função de Carregamento e Preparação de Dados
 def carregar_e_preparar_dados():
     try:
         here = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(here, "dados.csv")
-        print(f"Tentando carregar dados de: {csv_path}")
         df = pd.read_csv(csv_path, low_memory=False, encoding='cp1252', sep=';')
     except FileNotFoundError:
-        print(f"ERRO CRÍTICO: O arquivo '{csv_path}' não foi encontrado.")
-        sys.exit(1)
+        sys.exit(f"ERRO CRÍTICO: O arquivo 'dados.csv' não foi encontrado.")
     except Exception as e:
-        print(f"ERRO CRÍTICO: Falha ao ler o arquivo CSV: {e}")
-        sys.exit(1)
+        sys.exit(f"ERRO CRÍTICO: Falha ao ler o arquivo CSV: {e}")
 
-    print("Colunas originais:", df.columns.tolist())
-    
     mapa_colunas = {
         'NOME_MUNICIPIO': 'municipio',
         'NOME_SECCIONAL': 'regiao',
@@ -53,14 +46,11 @@ def carregar_e_preparar_dados():
     
     colunas_faltando = [col for col in colunas_essenciais if col not in df.columns]
     if colunas_faltando:
-        print(f"ERRO CRÍTICO: As seguintes colunas essenciais não foram encontradas: {colunas_faltando}.")
-        sys.exit(1)
+        sys.exit(f"ERRO CRÍTICO: As seguintes colunas essenciais não foram encontradas: {colunas_faltando}.")
 
-    print("Normalizando colunas de texto...")
     for col in ['municipio', 'regiao', 'bairro', 'delito']:
         df[col] = df[col].astype(str).apply(normalizar_str)
         
-    print("Convertendo colunas numéricas e de data...")
     for col in ['latitude', 'longitude']:
         if df[col].dtype == 'object':
             df[col] = df[col].str.replace(',', '.', regex=False)
@@ -72,8 +62,6 @@ def carregar_e_preparar_dados():
     df.dropna(subset=colunas_essenciais, inplace=True)
     df['ano'] = df['ano'].astype(int)
 
-    # MUDANÇA: Adicionado filtro geográfico para remover pontos fora do estado de São Paulo
-    print(f"Registros antes do filtro geográfico: {len(df)}")
     SP_LAT_MIN, SP_LAT_MAX = -25.4, -19.7
     SP_LON_MIN, SP_LON_MAX = -53.2, -44.1
     
@@ -81,21 +69,16 @@ def carregar_e_preparar_dados():
         (df['latitude'].between(SP_LAT_MIN, SP_LAT_MAX)) &
         (df['longitude'].between(SP_LON_MIN, SP_LON_MAX))
     ]
-    print(f"Registros após o filtro geográfico: {len(df)}")
     
-    print(f"Registros antes de filtrar 'outros' e 'nan': {len(df)}")
     df = df[~df['delito'].isin(['outros', 'nan'])]
-    print(f"Registros após filtrar 'outros' e 'nan': {len(df)}")
     
-    print(f"Sucesso! {len(df)} registros válidos carregados do CSV.")
     return df
 
 DF_GLOBAL = carregar_e_preparar_dados()
 
-# Config do FastAPI 
 app = FastAPI(
     title="API de Dados de Segurança Pública (Otimizada)",
-    description="Fornece dados individuais e insights sobre ocorrências criminais.",
+    description="Fornece dados individuais e insights sobre ocorrências criminais com base em dados locais.",
     version="3.3.0" 
 )
 
@@ -107,11 +90,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-def root():
-    return "Message: API is running"
-
-# Função de Filtro Comum
 def get_filtered_data(periodo, regiao, municipio, bairro):
     df_filtrado = DF_GLOBAL.copy()
     hoje = datetime.now()
@@ -123,8 +101,7 @@ def get_filtered_data(periodo, regiao, municipio, bairro):
         data_limite = hoje - timedelta(days=90)
         df_filtrado = df_filtrado[df_filtrado['data_registro'] >= data_limite]
     elif periodo == 'all_2025':
-        # Esta lógica pode precisar de ajuste dependendo do seu caso de uso com data dinâmica
-        df_filtrado = df_filtrado[df_filtrado['ano'] == hoje.year]
+        df_filtrado = df_filtrado[df_filtrado['ano'] == 2025]
     
     if municipio:
         df_filtrado = df_filtrado[df_filtrado["municipio"] == normalizar_str(municipio)]
@@ -135,12 +112,16 @@ def get_filtered_data(periodo, regiao, municipio, bairro):
         
     return df_filtrado
 
-# Endpoints da API
+@app.get("/")
+def root():
+    return {"message": "API de Dados de Segurança Pública está em execução."}
 
-@app.get("/api/ocorrencias", summary="Obtém ocorrências individuais com base em filtros")
+@app.get("/api/ocorrencias")
 def ocorrencias(
-    periodo: str = Query("last_quarter"), municipio: str = Query(None),
-    regiao: str = Query(None), bairro: str = Query(None)
+    periodo: str = Query("last_quarter", enum=["last_30_days", "last_quarter", "all_2025"]), 
+    municipio: str = Query(None),
+    regiao: str = Query(None), 
+    bairro: str = Query(None)
 ):
     try:
         df_filtrado = get_filtered_data(periodo, regiao, municipio, bairro)
@@ -151,35 +132,49 @@ def ocorrencias(
             if len(df_filtrado) > sample_size:
                 df_filtrado = df_filtrado.sample(n=sample_size, random_state=42)
         
-        if df_filtrado.empty: return {"geojson": {"type": "FeatureCollection", "features": []}}
+        if df_filtrado.empty: 
+            return {"geojson": {"type": "FeatureCollection", "features": []}}
         
         df_geojson = df_filtrado[['longitude', 'latitude', 'delito']].copy()
         df_geojson.dropna(subset=['latitude', 'longitude'], inplace=True)
 
-        features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [r["longitude"], r["latitude"]]}, "properties": {"delito": r["delito"]}} for i, r in df_geojson.iterrows()]
+        features = [
+            {
+                "type": "Feature", 
+                "geometry": {"type": "Point", "coordinates": [r["longitude"], r["latitude"]]}, 
+                "properties": {"delito": r["delito"]}
+            } 
+            for i, r in df_geojson.iterrows()
+        ]
         return {"geojson": {"type": "FeatureCollection", "features": features}}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro interno: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno ao processar ocorrências: {e}")
 
-@app.get("/api/resumo", summary="Gera um resumo dos dados filtrados")
+@app.get("/api/resumo")
 def resumo_para_ia(
-    periodo: str = Query("last_quarter"), regiao: str = Query(None),
-    municipio: str = Query(None), bairro: str = Query(None)
+    periodo: str = Query("last_quarter", enum=["last_30_days", "last_quarter", "all_2025"]), 
+    regiao: str = Query(None),
+    municipio: str = Query(None), 
+    bairro: str = Query(None)
 ):
     try:
         df_filtrado = get_filtered_data(periodo, regiao, municipio, bairro)
-        if df_filtrado.empty: return {"total_ocorrencias": 0, "resumo_delitos": {}, "local_filtrado": "Nenhum"}
+        if df_filtrado.empty: 
+            return {"total_ocorrencias": 0, "resumo_delitos": {}, "local_filtrado": "Nenhum"}
         
         local = "Estado de São Paulo"
         if bairro: local = f"Bairro {bairro.title()}"
         elif municipio: local = f"Município de {municipio.title()}"
         elif regiao: local = f"Região de {regiao.title()}"
 
-        return {"total_ocorrencias": len(df_filtrado), "resumo_delitos": df_filtrado['delito'].value_counts().to_dict(), "local_filtrado": local}
+        return {
+            "total_ocorrencias": len(df_filtrado), 
+            "resumo_delitos": df_filtrado['delito'].value_counts().to_dict(), 
+            "local_filtrado": local
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar resumo: {e}")
 
-# Endpoint para chamar a IA do Gemini 
 @app.post("/api/insights")
 def get_insights(data: dict = Body(...)):
     if not api_key:
@@ -194,7 +189,7 @@ def get_insights(data: dict = Body(...)):
     if total == 0:
         raise HTTPException(status_code=400, detail="Não há dados para gerar insights.")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     delitos_str = "\n".join([f"- {crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo.items()])
     
@@ -212,172 +207,61 @@ def get_insights(data: dict = Body(...)):
     
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.4,
-            "maxOutputTokens": 4096,
-        }
+        "generationConfig": { "temperature": 0.4, "maxOutputTokens": 4096 }
     }
     headers = {"Content-Type": "application/json"}
 
     try:
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=30)
-        
-        print(f"Gemini API response status: {response.status_code}")
-        
         response.raise_for_status()
-        
         result = response.json()
 
         if "candidates" in result and result["candidates"]:
             candidate = result["candidates"][0]
             if "content" in candidate and "parts" in candidate["content"] and candidate["content"]["parts"]:
-                insights_text = candidate["content"]["parts"][0]["text"]
-                return {"insights": insights_text}
+                return {"insights": candidate["content"]["parts"][0]["text"]}
         
         if "promptFeedback" in result and "blockReason" in result.get("promptFeedback", {}):
             reason = result["promptFeedback"]["blockReason"]
             detail_msg = f"A resposta foi bloqueada pela API de IA por motivo de segurança: {reason}"
-            print(f"ERROR: {detail_msg}")
             raise HTTPException(status_code=400, detail=detail_msg)
 
-        print(f"Resposta inesperada da API do Gemini: {result}")
         raise HTTPException(status_code=500, detail="Formato de resposta inesperado da API de IA.")
 
     except requests.exceptions.Timeout:
-        print("Erro: A requisição para a API do Gemini expirou (timeout).")
-        raise HTTPException(status_code=504, detail="A API de IA demorou muito para responder (timeout).")
+        raise HTTPException(status_code=504, detail="A API de IA demorou muito para responder.")
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao conectar com a API do Gemini: {e}")
-        detail_msg = "Erro de comunicação com a API de IA."
-        if e.response is not None:
-            print(f"Gemini API error response: {e.response.text}")
-            detail_msg = f"{detail_msg} Detalhe: {e.response.text}"
+        detail_msg = f"Erro de comunicação com a API de IA. Detalhe: {e.response.text if e.response else 'Sem resposta'}"
         raise HTTPException(status_code=502, detail=detail_msg)
     except Exception as e:
-        print(f"Ocorreu um erro inesperado no endpoint /insights: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno inesperado: {str(e)}")
-
 
 @app.get("/api/regioes")
 def get_regioes():
     try:
-        return {"data": [{"nome": n.upper()} for n in sorted(DF_GLOBAL['regiao'].unique()) if n]}
+        regioes_unicas = sorted(DF_GLOBAL['regiao'].unique())
+        return {"data": [{"nome": n.upper()} for n in regioes_unicas if n]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar regiões: {e}")
 
 @app.get("/api/municipios")
 def get_municipios(regiao: str = Query(None)):
     try:
-        df = DF_GLOBAL[DF_GLOBAL['regiao'] == normalizar_str(regiao)] if regiao else DF_GLOBAL
-        return {"data": [{"nome": n.upper()} for n in sorted(df['municipio'].unique()) if n]}
+        df = DF_GLOBAL
+        if regiao:
+            df = DF_GLOBAL[DF_GLOBAL['regiao'] == normalizar_str(regiao)]
+        municipios_unicos = sorted(df['municipio'].unique())
+        return {"data": [{"nome": n.upper()} for n in municipios_unicos if n]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar municípios: {e}")
 
 @app.get("/api/bairros")
 def get_bairros(municipio: str = Query(None)):
     try:
-        df = DF_GLOBAL[DF_GLOBAL['municipio'] == normalizar_str(municipio)] if municipio else DF_GLOBAL
-        return {"data": [{"nome": n.upper()} for n in sorted(df['bairro'].unique()) if n]}
+        df = DF_GLOBAL
+        if municipio:
+            df = DF_GLOBAL[DF_GLOBAL['municipio'] == normalizar_str(municipio)]
+        bairros_unicos = sorted(df['bairro'].unique())
+        return {"data": [{"nome": n.upper()} for n in bairros_unicos if n]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro: {e}")
-
-BASE_URL = "https://www.ssp.sp.gov.br/v1/"
-HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-
-@app.get("/")
-def root():
-    return {"message": "API is running"}
-
-@app.get("/regioes")
-def regioes():
-    url = BASE_URL + "Regioes/RecuperaRegioes"
-    try:
-        res = requests.get(url, headers=HEADERS)
-        res.raise_for_status()
-        return res.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na requisição Regioes: {e}")
-
-@app.get("/municipios")
-def municipios():
-    url = BASE_URL + "Municipios/RecuperaMunicipios"
-    try:
-        res = requests.get(url, headers=HEADERS)
-        res.raise_for_status()
-        return res.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na requisição Municipios: {e}")
-
-@app.get("/reverse-geocode")
-def reverse_geocode(lat: float = Query(...), lon: float = Query(...)):
-    url = "https://nominatim.openstreetmap.org/reverse"
-    params = {"format": "jsonv2", "lat": lat, "lon": lon}
-    headers = {"User-Agent": "sua-aplicacao/1.0 (contato@email.com)"}
-    try:
-        res = requests.get(url, params=params, headers=headers)
-        res.raise_for_status()
-        return res.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro na geolocalização: {e}")
-
-@app.get("/ocorrencias")
-def ocorrencias(
-    ano: int = Query(...),
-    tipoGrupo: str = Query(..., regex="^(MUNICIPIO|REGIAO)$"),
-    idGrupo: int = Query(...),
-    grupoDelito: int = Query(6),
-):
-    url = BASE_URL + "OcorrenciasMensais/RecuperaDadosMensaisAgrupados"
-    params = {"ano": ano, "tipoGrupo": tipoGrupo, "idGrupo": idGrupo, "grupoDelito": grupoDelito}
-    try:
-        res = requests.get(url, headers=HEADERS, params=params)
-        res.raise_for_status()
-        data = res.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar ocorrências: {e}")
-
-    if not data.get("success") or not data.get("data"):
-        raise HTTPException(status_code=404, detail="Nenhum dado encontrado")
-
-    resumo = {}
-    for item in data["data"]:
-        for d in item.get("listaDados", []):
-            nome = d.get("delito", {}).get("delito")
-            total = d.get("total", 0)
-            resumo[nome] = resumo.get(nome, 0) + total
-
-    return {"ano": ano, "resumo": resumo}
-
-@app.post("/insights")
-def insights(resumo: dict = Body(..., example={"HOMICÍDIO DOLOSO (2)": 839, "LATROCÍNIO": 51})):
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-
-    prompt = (
-        "Você é um analista de segurança pública. Com base nestes dados de ocorrências por tipo de crime em 2025, "
-        "gere 3 insights relevantes, cada um com breve descrição e possíveis recomendações de políticas públicas. "
-        f"Dados: {resumo}"
-    )
-
-    body = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
-    }
-
-    headers = {"Content-Type": "application/json"}
-
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(body))
-        response.raise_for_status()
-        result = response.json()
-
-        insights_text = result["candidates"][0]["content"]["parts"][0]["text"]
-        return {"insights": insights_text}
-    except Exception as e:
-        print("Erro Gemini API:", e)
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar insights com Gemini: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar bairros: {e}")
