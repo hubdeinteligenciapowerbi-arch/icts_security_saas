@@ -1,0 +1,13 @@
+.gitignore
+.gitattributes
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+.dockerignore
+.env
+
+LICENSE
+README.md
