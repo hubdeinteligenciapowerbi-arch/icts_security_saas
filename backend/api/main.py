@@ -13,25 +13,18 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
 
-# --- Configuração de Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Carregamento de Variáveis de Ambiente ---
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
+key = "AIzaSyCZ_hnPtA4wd467OodAkF3CTtfMirONzBQ"
 
-# --- Constantes ---
-# URL para a lista de seccionais, que é mais estável
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
-# --- Cache em Memória para Dados da SSP ---
 SSP_DATA_CACHE = None
 SSP_CACHE_EXPIRY = None
 
-# --- Funções Auxiliares ---
 
 def normalizar_str(s: str) -> str:
-    """Normaliza uma string para minúsculas, sem acentos e espaços extras."""
     if not isinstance(s, str):
         return ""
     return unicodedata.normalize('NFD', s)\
@@ -40,7 +33,6 @@ def normalizar_str(s: str) -> str:
         .lower().strip()
 
 def carregar_e_preparar_dados():
-    """Carrega e pré-processa os dados de ocorrências do arquivo CSV local."""
     try:
         here = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(here, "dados.csv")
@@ -67,20 +59,16 @@ def carregar_e_preparar_dados():
     for col in ['municipio', 'regiao', 'bairro', 'delito']:
         df[col] = df[col].astype(str).apply(normalizar_str)
         
-    # --- LÓGICA DE LIMPEZA DE DADOS INCONSISTENTES ---
     logging.info("Iniciando limpeza de dados geográficos inconsistentes...")
 
-    # Lista de valores a serem completamente removidos
     junk_geral = ['-', '0', '2', 'nan', 'a definir', '']
     
-    # Limpeza da coluna 'bairro'
     df = df[~df['bairro'].isin(junk_geral)]
-    df = df[~df['bairro'].str.match(r'^\d+$')] # Remove bairros que são apenas números
-    df = df[~df['bairro'].str.match(r'^\d{5}-\d{3}$')] # Remove CEPs
-    df = df[~df['bairro'].str.match(r'^\(.*\)$')] # Remove valores entre parênteses (ex: (L-9))
-    df = df[df['bairro'].str.len() > 2] # Remove nomes de bairro muito curtos
+    df = df[~df['bairro'].str.match(r'^\d+$')]
+    df = df[~df['bairro'].str.match(r'^\d{5}-\d{3}$')] 
+    df = df[~df['bairro'].str.match(r'^\(.*\)$')] 
+    df = df[df['bairro'].str.len() > 2] 
 
-    # Limpeza mais simples para município e região para remover lixo óbvio
     df = df[~df['municipio'].isin(junk_geral)]
     df = df[df['municipio'].str.len() > 2]
     
@@ -88,7 +76,6 @@ def carregar_e_preparar_dados():
     df = df[df['regiao'].str.len() > 2]
 
     logging.info("Limpeza de dados inconsistentes concluída.")
-    # --- FIM DA NOVA LÓGICA ---
         
     for col in ['latitude', 'longitude']:
         if df[col].dtype == 'object':
@@ -108,7 +95,6 @@ def carregar_e_preparar_dados():
         (df['longitude'].between(SP_LON_MIN, SP_LON_MAX))
     ]
     
-    # --- FILTRO DE CRIMES VÁLIDOS ---
     crimes_validos = [
         'fios e cabos',
         'joalheria',
@@ -122,21 +108,17 @@ def carregar_e_preparar_dados():
         'veiculo'
     ]
     
-    # Mantém apenas as linhas cujo 'delito' está na lista de crimes válidos
     df = df[df['delito'].isin(crimes_validos)]
     logging.info(f"Dados filtrados para conter apenas {len(crimes_validos)} tipos de crimes válidos.")
     
     logging.info("Pré-processamento dos dados de ocorrências concluído.")
     return df
 
-# --- Inicialização dos Dados e App ---
-# É crucial carregar o DF_GLOBAL antes de definir as funções que o utilizam.
+
 DF_GLOBAL = carregar_e_preparar_dados()
 
 def get_ssp_locais_df():
-    """
-    Busca dados de locais da API da SSP com cache e fallback para dados locais.
-    """
+
     global SSP_DATA_CACHE, SSP_CACHE_EXPIRY
     
     if SSP_DATA_CACHE is not None and SSP_CACHE_EXPIRY > datetime.now():
@@ -172,7 +154,6 @@ def get_ssp_locais_df():
             logging.warning("API da SSP indisponível. Retornando dados de regiões do cache antigo.")
             return SSP_DATA_CACHE
         
-        # --- LÓGICA DE FALLBACK ---
         logging.warning("API da SSP e cache indisponíveis. Usando dados do arquivo local como fallback.")
         try:
             regioes_locais = DF_GLOBAL['regiao'].unique()
@@ -205,19 +186,15 @@ class InsightsRequest(BaseModel):
     bairro: Optional[str] = None
     delito: Optional[str] = None
 
-# --- Funções de Filtragem (usando DF_GLOBAL) ---
 
 def get_filtered_data(periodo, regiao, municipio, bairro, delito):
-    """Filtra o DataFrame global com base nos parâmetros fornecidos, usando a data mais recente da base de dados como referência."""
     df_filtrado = DF_GLOBAL.copy()
     
-    # --- LÓGICA DE DATA ATUALIZADA ---
-    # Usa a data mais recente dos dados como referência, em vez da data atual.
     if not df_filtrado.empty and pd.api.types.is_datetime64_any_dtype(df_filtrado['data_registro']):
         data_maxima = df_filtrado['data_registro'].max()
         logging.info(f"Usando a data máxima da base de dados como referência: {data_maxima.strftime('%Y-%m-%d')}")
     else:
-        data_maxima = datetime.now() # Fallback para a data atual se não houver dados ou a coluna não for do tipo data
+        data_maxima = datetime.now() 
         logging.warning(f"Não foi possível encontrar data máxima. Usando a data atual como referência: {data_maxima.strftime('%Y-%m-%d')}")
 
     if periodo == 'last_30_days':
@@ -227,7 +204,6 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
     elif periodo == 'all_2025':
         df_filtrado = df_filtrado[df_filtrado['ano'] == 2025]
     
-    # Lógica para ignorar o valor 'string' dos filtros
     if regiao and regiao.lower() != 'string':
         df_filtrado = df_filtrado[df_filtrado["regiao"] == normalizar_str(regiao)]
     if municipio and municipio.lower() != 'string':
@@ -239,7 +215,6 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
         
     return df_filtrado
 
-# --- Endpoints da API ---
 
 @app.get("/")
 def root():
@@ -248,8 +223,8 @@ def root():
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
     logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
-    if not api_key:
-        logging.error("ERRO FATAL: GEMINI_API_KEY não encontrada.")
+    if not key:
+        logging.error("ERRO FATAL: API_KEY não encontrada.")
         raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
     
     df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
@@ -273,7 +248,7 @@ def get_insights(request: InsightsRequest):
     periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
     periodo_str = periodo_map.get(request.periodo, "período não especificado")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={key}"
     delitos_str = "\n".join([f"- {crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
     prompt = (
         "Você é um especialista em segurança pública. Com base nos seguintes dados de ocorrências criminais, "
@@ -286,6 +261,20 @@ def get_insights(request: InsightsRequest):
     )
     body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
     headers = {"Content-Type": "application/json"}
+
+    logging.info("--- INICIANDO DEPURAÇÃO DA API KEY ---")
+    # Vamos verificar o tipo e o conteúdo da variável 'key' global
+    if key and isinstance(key, str) and len(key) > 20:
+        logging.info("--> Variável 'key' encontrada e parece ser válida.")
+        logging.info(f"    Tipo da variável 'key': {type(key)}")
+        logging.info(f"    Comprimento: {len(key)} caracteres.")
+        logging.info(f"    Verificação (primeiros 4 caracteres): {key[:4]}")
+    else:
+        logging.error(f"--> ERRO CRÍTICO: A variável 'key' está VAZIA, não é string ou é muito curta. Valor: '{key}'")
+
+    # Vamos imprimir a URL exata que será usada
+    logging.info(f"URL final que será chamada: {url}")
+    logging.info("--- FIM DO BLOCO DE DEPURAÇÃO ---")
 
     try:
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
@@ -344,11 +333,9 @@ def ocorrencias(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro interno ao processar ocorrências: {e}")
 
-# --- Endpoints de Locais (Fonte Mista) ---
 
 @app.get("/api/regioes")
 def get_regioes():
-    """Busca regiões (delegacias seccionais) diretamente da API externa da SSP."""
     try:
         df_ssp = get_ssp_locais_df()
         regioes_unicas = sorted(df_ssp['regiao'].unique())
@@ -360,7 +347,6 @@ def get_regioes():
 
 @app.get("/api/municipios")
 def get_municipios(regiao: str = Query(None)):
-    """Busca municípios a partir dos dados locais (dados.csv)."""
     try:
         df = DF_GLOBAL
         if regiao and regiao.lower() != 'string':
