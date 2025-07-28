@@ -12,26 +12,30 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
+from random import uniform
 
-# --- Configuração de Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Carregamento de Variáveis de Ambiente ---
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 
-# --- Constantes ---
-# URL para a lista de seccionais, que é mais estável
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
-# --- Cache em Memória para Dados da SSP ---
 SSP_DATA_CACHE = None
 SSP_CACHE_EXPIRY = None
 
-# --- Funções Auxiliares ---
+def verificar_uso_de_creditos() -> float:
+    try:
+        simulated_usage = uniform(0.1, 0.99)
+        logging.info(f"Simulação: Uso de créditos atual em {simulated_usage:.2%}")
+        return simulated_usage
+    except Exception as e:
+        logging.error(f"Falha CRÍTICA ao verificar uso de créditos: {e}")
+        return 1.0
+
+USO_MAXIMO_PERMITIDO = 0.90
 
 def normalizar_str(s: str) -> str:
-    """Normaliza uma string para minúsculas, sem acentos e espaços extras."""
     if not isinstance(s, str):
         return ""
     return unicodedata.normalize('NFD', s)\
@@ -40,7 +44,6 @@ def normalizar_str(s: str) -> str:
         .lower().strip()
 
 def carregar_e_preparar_dados():
-    """Carrega e pré-processa os dados de ocorrências do arquivo CSV local."""
     try:
         here = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(here, "dados.csv")
@@ -67,20 +70,16 @@ def carregar_e_preparar_dados():
     for col in ['municipio', 'regiao', 'bairro', 'delito']:
         df[col] = df[col].astype(str).apply(normalizar_str)
         
-    # --- LÓGICA DE LIMPEZA DE DADOS INCONSISTENTES ---
     logging.info("Iniciando limpeza de dados geográficos inconsistentes...")
 
-    # Lista de valores a serem completamente removidos
     junk_geral = ['-', '0', '2', 'nan', 'a definir', '']
     
-    # Limpeza da coluna 'bairro'
     df = df[~df['bairro'].isin(junk_geral)]
-    df = df[~df['bairro'].str.match(r'^\d+$')] # Remove bairros que são apenas números
-    df = df[~df['bairro'].str.match(r'^\d{5}-\d{3}$')] # Remove CEPs
-    df = df[~df['bairro'].str.match(r'^\(.*\)$')] # Remove valores entre parênteses (ex: (L-9))
-    df = df[df['bairro'].str.len() > 2] # Remove nomes de bairro muito curtos
+    df = df[~df['bairro'].str.match(r'^\d+$')]
+    df = df[~df['bairro'].str.match(r'^\d{5}-\d{3}$')]
+    df = df[~df['bairro'].str.match(r'^\(.*\)$')]
+    df = df[df['bairro'].str.len() > 2]
 
-    # Limpeza mais simples para município e região para remover lixo óbvio
     df = df[~df['municipio'].isin(junk_geral)]
     df = df[df['municipio'].str.len() > 2]
     
@@ -88,7 +87,6 @@ def carregar_e_preparar_dados():
     df = df[df['regiao'].str.len() > 2]
 
     logging.info("Limpeza de dados inconsistentes concluída.")
-    # --- FIM DA NOVA LÓGICA ---
         
     for col in ['latitude', 'longitude']:
         if df[col].dtype == 'object':
@@ -108,35 +106,21 @@ def carregar_e_preparar_dados():
         (df['longitude'].between(SP_LON_MIN, SP_LON_MAX))
     ]
     
-    # --- FILTRO DE CRIMES VÁLIDOS ---
     crimes_validos = [
-        'fios e cabos',
-        'joalheria',
-        'lesao corporal de natureza grave',
-        'morte acidental',
-        'morte subita, sem causa determinante aparente',
-        'pessoa',
-        'residencia',
-        'saidinha de banco',
-        'transeunte',
-        'veiculo'
+        'fios e cabos', 'joalheria', 'lesao corporal de natureza grave',
+        'morte acidental', 'morte subita, sem causa determinante aparente',
+        'pessoa', 'residencia', 'saidinha de banco', 'transeunte', 'veiculo'
     ]
     
-    # Mantém apenas as linhas cujo 'delito' está na lista de crimes válidos
     df = df[df['delito'].isin(crimes_validos)]
     logging.info(f"Dados filtrados para conter apenas {len(crimes_validos)} tipos de crimes válidos.")
     
     logging.info("Pré-processamento dos dados de ocorrências concluído.")
     return df
 
-# --- Inicialização dos Dados e App ---
-# É crucial carregar o DF_GLOBAL antes de definir as funções que o utilizam.
 DF_GLOBAL = carregar_e_preparar_dados()
 
 def get_ssp_locais_df():
-    """
-    Busca dados de locais da API da SSP com cache e fallback para dados locais.
-    """
     global SSP_DATA_CACHE, SSP_CACHE_EXPIRY
     
     if SSP_DATA_CACHE is not None and SSP_CACHE_EXPIRY > datetime.now():
@@ -150,12 +134,12 @@ def get_ssp_locais_df():
         
         dados_api = response.json()
         if not dados_api:
-             raise ValueError("A API da SSP retornou uma lista vazia.")
+                raise ValueError("A API da SSP retornou uma lista vazia.")
         
         df = pd.DataFrame(dados_api)
         
         if 'NOME_SECCIONAL' not in df.columns:
-             raise ValueError("A resposta da API da SSP não contém a coluna 'NOME_SECCIONAL'.")
+                raise ValueError("A resposta da API da SSP não contém a coluna 'NOME_SECCIONAL'.")
 
         df.rename(columns={'NOME_SECCIONAL': 'regiao'}, inplace=True)
         df['regiao'] = df['regiao'].astype(str).apply(normalizar_str)
@@ -172,7 +156,6 @@ def get_ssp_locais_df():
             logging.warning("API da SSP indisponível. Retornando dados de regiões do cache antigo.")
             return SSP_DATA_CACHE
         
-        # --- LÓGICA DE FALLBACK ---
         logging.warning("API da SSP e cache indisponíveis. Usando dados do arquivo local como fallback.")
         try:
             regioes_locais = DF_GLOBAL['regiao'].unique()
@@ -187,7 +170,7 @@ def get_ssp_locais_df():
 app = FastAPI(
     title="API de Dados de Segurança Pública (Unificada)",
     description="Fornece dados e insights sobre ocorrências criminais.",
-    version="5.9.0" 
+    version="6.0.0"
 )
 
 origins = ["http://localhost", "http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5500"]
@@ -196,8 +179,6 @@ app.add_middleware(
     allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-# --- Modelos de Dados (Pydantic) ---
-
 class InsightsRequest(BaseModel):
     periodo: str = "last_quarter"
     regiao: Optional[str] = None
@@ -205,19 +186,14 @@ class InsightsRequest(BaseModel):
     bairro: Optional[str] = None
     delito: Optional[str] = None
 
-# --- Funções de Filtragem (usando DF_GLOBAL) ---
-
 def get_filtered_data(periodo, regiao, municipio, bairro, delito):
-    """Filtra o DataFrame global com base nos parâmetros fornecidos, usando a data mais recente da base de dados como referência."""
     df_filtrado = DF_GLOBAL.copy()
-    
-    # --- LÓGICA DE DATA ATUALIZADA ---
-    # Usa a data mais recente dos dados como referência, em vez da data atual.
+
     if not df_filtrado.empty and pd.api.types.is_datetime64_any_dtype(df_filtrado['data_registro']):
         data_maxima = df_filtrado['data_registro'].max()
         logging.info(f"Usando a data máxima da base de dados como referência: {data_maxima.strftime('%Y-%m-%d')}")
     else:
-        data_maxima = datetime.now() # Fallback para a data atual se não houver dados ou a coluna não for do tipo data
+        data_maxima = datetime.now()
         logging.warning(f"Não foi possível encontrar data máxima. Usando a data atual como referência: {data_maxima.strftime('%Y-%m-%d')}")
 
     if periodo == 'last_30_days':
@@ -227,7 +203,6 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
     elif periodo == 'all_2025':
         df_filtrado = df_filtrado[df_filtrado['ano'] == 2025]
     
-    # Lógica para ignorar o valor 'string' dos filtros
     if regiao and regiao.lower() != 'string':
         df_filtrado = df_filtrado[df_filtrado["regiao"] == normalizar_str(regiao)]
     if municipio and municipio.lower() != 'string':
@@ -238,8 +213,6 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
         df_filtrado = df_filtrado[df_filtrado["delito"] == normalizar_str(delito)]
         
     return df_filtrado
-
-# --- Endpoints da API ---
 
 @app.get("/")
 def root():
@@ -252,42 +225,52 @@ def get_insights(request: InsightsRequest):
         logging.error("ERRO FATAL: GEMINI_API_KEY não encontrada.")
         raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
     
-    df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
-
-    if df_filtrado.empty:
-        logging.warning("Nenhum dado encontrado para os filtros fornecidos.")
-        return {"insights": "<h4>Sem dados</h4><p>Não há ocorrências para os filtros selecionados.</p>"}
-
-    total = len(df_filtrado)
-    resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
-    
-    local = "Estado de São Paulo"
-    if request.bairro and request.bairro.lower() != 'string':
-        local = f"Bairro {request.bairro.title()}"
-    elif request.municipio and request.municipio.lower() != 'string':
-        local = f"Município de {request.municipio.title()}"
-    elif request.regiao and request.regiao.lower() != 'string':
-        local = f"Região de {request.regiao.title()}"
-
-
-    periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
-    periodo_str = periodo_map.get(request.periodo, "período não especificado")
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
-    delitos_str = "\n".join([f"- {crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
-    prompt = (
-        "Você é um especialista em segurança pública. Com base nos seguintes dados de ocorrências criminais, "
-        f"para o local '{local}' no período de '{periodo_str}', gere uma análise concisa em HTML.\n\n"
-        f"**Dados Consolidados:**\n- Total de Ocorrências: {total}\n- Detalhamento de Delitos:\n{delitos_str}\n\n"
-        "**Análise Solicitada (use títulos h4, parágrafos p e listas ul/li):**\n"
-        "1. **Resumo da Situação:** Descreva o cenário de segurança da área.\n"
-        "2. **Principais Pontos de Atenção:** Identifique os 2 crimes mais comuns e comente sobre possíveis fatores.\n"
-        "3. **Recomendações:** Forneça 3 recomendações práticas (cidadãos, polícia, políticas públicas)."
-    )
-    body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
-    headers = {"Content-Type": "application/json"}
-
     try:
+        uso_atual = verificar_uso_de_creditos()
+        if uso_atual >= USO_MAXIMO_PERMITIDO:
+            logging.warning(f"Uso de créditos ({uso_atual:.2%}) atingiu ou excedeu o limite de {USO_MAXIMO_PERMITIDO:.2%}. Bloqueando requisição.")
+            raise HTTPException(
+                status_code=429,
+                detail=f"O limite de uso de {USO_MAXIMO_PERMITIDO:.0%} da plataforma foi atingido. Novas análises estão temporariamente bloqueadas."
+            )
+        logging.info("Uso de créditos OK. Prosseguindo com a geração de insights.")
+
+        df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
+
+        if df_filtrado.empty:
+            logging.warning("Nenhum dado encontrado para os filtros fornecidos.")
+            return {"insights": "<h4>Sem dados</h4><p>Não há ocorrências para os filtros selecionados.</p>"}
+
+        total = len(df_filtrado)
+        resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
+        
+        local = "Estado de São Paulo"
+        if request.bairro and request.bairro.lower() != 'string':
+            local = f"Bairro {request.bairro.title()}"
+        elif request.municipio and request.municipio.lower() != 'string':
+            local = f"Município de {request.municipio.title()}"
+        elif request.regiao and request.regiao.lower() != 'string':
+            local = f"Região de {request.regiao.title()}"
+
+        periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
+        periodo_str = periodo_map.get(request.periodo, "período não especificado")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
+        
+        delitos_str = "; ".join([f"{crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
+        
+        prompt_otimizado = (
+            f"Tarefa: Gerar análise de segurança em HTML para {local} ({periodo_str}).\n"
+            f"Dados: Total={total}; Delitos={delitos_str}\n"
+            "Estrutura Obrigatória:\n"
+            "<h4>Resumo da Situação</h4><p>[descreva o cenário de segurança da área]</p>\n"
+            "<h4>Principais Pontos de Atenção</h4><ul><li>[identifique o crime mais comum e comente possíveis fatores]</li><li>[identifique o segundo crime mais comum e comente]</li></ul>\n"
+            "<h4>Recomendações</h4><ul><li>Cidadãos: [dica prática]</li><li>Polícia: [sugestão de ação]</li><li>Políticas Públicas: [sugestão de política]</li></ul>"
+        )
+        
+        body = {"contents": [{"parts": [{"text": prompt_otimizado}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
+        headers = {"Content-Type": "application/json"}
+
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
         response.raise_for_status()
         result = response.json()
@@ -308,12 +291,15 @@ def get_insights(request: InsightsRequest):
             
             error_text = e.response.text
             logging.error(f"Erro de comunicação com a API do Gemini. Status: {e.response.status_code}. Detalhe: {error_text}")
-            raise HTTPException(status_code=502, detail=f"Erro de comunicação com a API de IA (Status {e.response.status_code}). Verifique os logs do servidor.")
+            raise HTTPException(status_code=502, detail=f"Erro de comunicação com a API de IA (Status {e.response.status_code}).")
         else:
             logging.error(f"Erro de rede ao tentar contatar a API do Gemini: {e}")
-            raise HTTPException(status_code=503, detail="Não foi possível conectar à API de IA. Verifique a conexão de rede do servidor.")
+            raise HTTPException(status_code=503, detail="Não foi possível conectar à API de IA.")
             
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        
         logging.error(f"Ocorreu um erro interno inesperado: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Erro interno inesperado: {str(e)}")
@@ -344,11 +330,8 @@ def ocorrencias(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro interno ao processar ocorrências: {e}")
 
-# --- Endpoints de Locais (Fonte Mista) ---
-
 @app.get("/api/regioes")
 def get_regioes():
-    """Busca regiões (delegacias seccionais) diretamente da API externa da SSP."""
     try:
         df_ssp = get_ssp_locais_df()
         regioes_unicas = sorted(df_ssp['regiao'].unique())
@@ -360,7 +343,6 @@ def get_regioes():
 
 @app.get("/api/municipios")
 def get_municipios(regiao: str = Query(None)):
-    """Busca municípios a partir dos dados locais (dados.csv)."""
     try:
         df = DF_GLOBAL
         if regiao and regiao.lower() != 'string':
