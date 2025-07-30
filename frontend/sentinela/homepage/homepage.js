@@ -1,11 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Constantes e Variáveis Globais
     const API_BASE_URL = "http://127.0.0.1:8000/api";
     const SAO_PAULO_VIEW = { center: [-22.19, -48.79], zoom: 7 };
     let map;
     let bubbleLayer;
     let heatLayer;
-    let currentView = 'bubbles'; 
-    let lastGeoJsonData = null; 
+    let currentView = 'bubbles';
+    let lastGeoJsonData = null;
+    let userLocationMarker = null; // NOVO: Variável para guardar o marcador de localização
 
     // Seleção de todos os elementos da página
     const spinnerOverlay = document.getElementById('spinner-overlay');
@@ -15,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectRegiao = document.getElementById('regiao');
     const selectMunicipio = document.getElementById('municipio');
     const selectBairro = document.getElementById('bairro');
-    const selectCriminalidade = document.getElementById('criminalidade'); 
+    const selectCriminalidade = document.getElementById('criminalidade');
     const btnBuscar = document.getElementById('search-button');
     const btnLimpar = document.getElementById('btn-limpar');
     const btnLocalizacao = document.getElementById('btn-localizacao');
@@ -41,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideInfo() {
         infoMessage.classList.add('d-none');
     }
-    
+
     function showSpinner() {
         spinnerOverlay.classList.remove('d-none');
     }
@@ -49,33 +51,35 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideSpinner() {
         spinnerOverlay.classList.add('d-none');
     }
-    
+
     function toggleDarkMode() {
         document.body.classList.toggle('dark-mode');
         const isDarkMode = document.body.classList.contains('dark-mode');
-        darkModeToggle.textContent = isDarkMode ? '☀️' : '🌙';
+        darkModeToggle.textContent = isDarkMode ? '☀️' : '�';
         localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
     }
-    
+
     // Funções do Mapa
     function inicializarMapa() {
         map = L.map('map').setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
-        
-        bubbleLayer = L.layerGroup().addTo(map); 
+
+        bubbleLayer = L.layerGroup().addTo(map);
         heatLayer = L.heatLayer([], { radius: 20, blur: 15, maxZoom: 12 });
     }
 
     function renderDataOnMap(geojson, isFiltered) {
-        lastGeoJsonData = geojson; 
+        lastGeoJsonData = geojson;
         bubbleLayer.clearLayers();
         heatLayer.setLatLngs([]);
 
         if (!geojson || !geojson.features || geojson.features.length === 0) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
-            map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+            if (!isFiltered) {
+                 map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+            }
             return;
         }
 
@@ -86,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return { lat, lng, delito: feature.properties.delito };
             }
             return null;
-        }).filter(Boolean); 
+        }).filter(Boolean);
 
         if (validPoints.length === 0) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado com coordenadas válidas.</p>';
@@ -96,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentView === 'bubbles') {
             if (!map.hasLayer(bubbleLayer)) map.addLayer(bubbleLayer);
             if (map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
-            
+
             validPoints.forEach(point => {
                 const circle = L.circle([point.lat, point.lng], {
                     color: '#E60000', fillColor: '#f03', fillOpacity: 0.6, radius: 60, weight: 1
@@ -106,23 +110,23 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (!map.hasLayer(heatLayer)) map.addLayer(heatLayer);
             if (map.hasLayer(bubbleLayer)) map.removeLayer(bubbleLayer);
-            const heatData = validPoints.map(p => [p.lat, p.lng, 1.0]); 
+            const heatData = validPoints.map(p => [p.lat, p.lng, 1.0]);
             heatLayer.setLatLngs(heatData);
         }
 
         if (isFiltered && validPoints.length > 0) {
             const bounds = L.latLngBounds(validPoints.map(p => [p.lat, p.lng]));
             if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-        } else {
+        } else if (!isFiltered) {
             map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         }
     }
-    
+
     // Função genérica para preencher seletores
     async function fetchAndPopulate(endpoint, selectElement, placeholder, transformFn) {
         selectElement.disabled = true;
         selectElement.innerHTML = `<option value="">A carregar...</option>`;
-         try {
+        try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`);
             if (!response.ok) throw new Error(`Falha na resposta da API: ${response.statusText}`);
             const { data } = await response.json();
@@ -156,16 +160,16 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const option of sel.options) {
                 if (option.textContent.toUpperCase() === searchTerm) {
                     sel.value = option.value;
-                    found = true; 
+                    found = true;
                     break;
                 }
             }
-            if(found) break;
+            if (found) break;
         }
         if (found) buscarOcorrencias();
         else showInfo("Local não encontrado nos filtros.", "warning");
     }
-    
+
     async function buscarOcorrencias() {
         showSpinner();
         const params = new URLSearchParams();
@@ -173,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectRegiao.value) params.set('regiao', selectRegiao.value);
         if (selectMunicipio.value) params.set('municipio', selectMunicipio.value);
         if (selectBairro.value) params.set('bairro', selectBairro.value);
-        if (selectCriminalidade.value) params.set('delito', selectCriminalidade.value); // Adicionado
+        if (selectCriminalidade.value) params.set('delito', selectCriminalidade.value);
 
         const isFiltered = !!(selectRegiao.value || selectMunicipio.value || selectBairro.value || selectCriminalidade.value);
 
@@ -194,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         insightsContent.innerHTML = '<p>Gerando insights, por favor aguarde...</p>';
         insightsMessage.classList.remove('d-none');
         showSpinner();
-        
+
         const body = {
             periodo: selectPeriodo.value,
             regiao: selectRegiao.value,
@@ -212,33 +216,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const json = await res.json();
             if (!res.ok) throw new Error(json.detail || `Erro ${res.status}`);
             insightsContent.innerHTML = json.insights;
-        } catch(err) {
+        } catch (err) {
             insightsContent.innerHTML = `<div class="alert alert-danger">Erro ao gerar insights: ${err.message}</div>`;
         } finally {
             hideSpinner();
         }
     }
-    
+
     function limparFiltros() {
         geralSearchInput.value = '';
         selectRegiao.value = '';
         selectMunicipio.value = '';
         selectBairro.value = '';
-        selectCriminalidade.value = ''; // Adicionado
+        selectCriminalidade.value = '';
         selectPeriodo.value = 'last_quarter';
+
+        // ALTERADO: Remove o marcador de localização do mapa, se ele existir
+        if (userLocationMarker) {
+            map.removeLayer(userLocationMarker);
+            userLocationMarker = null; // Limpa a referência
+        }
+
         selectMunicipio.dispatchEvent(new Event('change'));
         buscarOcorrencias();
     }
 
-    // EVENT LISTENERS 
+    // --- INICIALIZAÇÃO E EVENT LISTENERS ---
     inicializarMapa();
-    
+
     const itemTransform = item => ({ value: item.nome.toLowerCase(), text: item.nome });
     fetchAndPopulate('/regioes', selectRegiao, 'Todas as Delegacias', itemTransform);
     fetchAndPopulate('/municipios', selectMunicipio, 'Todos os Municípios', itemTransform);
     fetchAndPopulate('/bairros', selectBairro, 'Todos os Bairros', itemTransform);
-    fetchAndPopulate('/delitos', selectCriminalidade, 'Todos os Crimes', itemTransform); // Adicionado
-    
+    fetchAndPopulate('/delitos', selectCriminalidade, 'Todos os Crimes', itemTransform);
+
     selectRegiao.addEventListener('change', () => {
         const endpoint = selectRegiao.value ? `/municipios?regiao=${encodeURIComponent(selectRegiao.value)}` : '/municipios';
         fetchAndPopulate(endpoint, selectMunicipio, 'Todos os Municípios', itemTransform);
@@ -250,13 +261,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const endpoint = selectMunicipio.value ? `/bairros?municipio=${encodeURIComponent(selectMunicipio.value)}` : '/bairros';
         fetchAndPopulate(endpoint, selectBairro, 'Todos os Bairros', itemTransform);
     });
-    
+
     geralSearchInput.addEventListener('keyup', (event) => { if (event.key === 'Enter') handleGeneralSearch(); });
     btnBuscar.addEventListener('click', () => { geralSearchInput.value.trim() ? handleGeneralSearch() : buscarOcorrencias(); });
     btnLimpar.addEventListener('click', limparFiltros);
     btnInsights.addEventListener('click', buscarInsights);
     closeInsightsBtn.addEventListener('click', () => insightsMessage.classList.add('d-none'));
-    
+
     viewToggleBtn.addEventListener('click', () => {
         currentView = currentView === 'bubbles' ? 'heatmap' : 'bubbles';
         viewToggleBtn.title = currentView === 'bubbles' ? 'Alternar para Mapa de Calor' : 'Alternar para Ocorrências';
@@ -270,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
     darkModeToggle.addEventListener('click', toggleDarkMode);
-    
+
     // --- Lógica para Busca por Voz ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -281,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 recognition.start();
                 showInfo("A ouvir...", "info");
-            } catch (error) { console.log("A reconhecimento já começou."); }
+            } catch (error) { console.log("O reconhecimento já começou."); }
         });
         recognition.onresult = (event) => {
             const text = event.results[event.results.length - 1][0].transcript;
@@ -307,8 +318,17 @@ document.addEventListener('DOMContentLoaded', () => {
             showInfo('Obtendo sua localização...', 'info');
             navigator.geolocation.getCurrentPosition(position => {
                 const { latitude, longitude } = position.coords;
+
+                // ALTERADO: Remove o marcador anterior, se existir
+                if (userLocationMarker) {
+                    map.removeLayer(userLocationMarker);
+                }
+
                 map.setView([latitude, longitude], 15);
-                L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
+
+                // ALTERADO: Armazena o novo marcador na variável
+                userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
+
                 hideInfo();
             }, () => {
                 showInfo('Não foi possível obter sua localização.', 'danger');
@@ -317,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showInfo('Geolocalização não é suportada por este navegador.', 'warning');
         }
     });
-    
+
     // Carga inicial de dados
     buscarOcorrencias();
-});
+}); 

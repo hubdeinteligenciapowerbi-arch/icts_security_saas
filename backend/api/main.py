@@ -13,11 +13,12 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
 from random import uniform
+import time 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g" 
+api_key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g"  
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
@@ -221,7 +222,7 @@ def root():
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
     logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
-    if not key:
+    if not api_key:
         logging.error("ERRO FATAL: API_KEY não encontrada.")
         raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
     
@@ -270,6 +271,9 @@ def get_insights(request: InsightsRequest):
         
         body = {"contents": [{"parts": [{"text": prompt_otimizado}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
         headers = {"Content-Type": "application/json"}
+
+        logging.info("Aguardando 1 segundo antes de chamar a API do Gemini para evitar limites de taxa.")
+        time.sleep(1)
 
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
         response.raise_for_status()
