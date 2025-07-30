@@ -17,7 +17,7 @@ from random import uniform
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-key = "AIzaSyCZ_hnPtA4wd467OodAkF3CTtfMirONzBQ"
+key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g" 
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
@@ -255,7 +255,7 @@ def get_insights(request: InsightsRequest):
         periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
         periodo_str = periodo_map.get(request.periodo, "período não especificado")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
         delitos_str = "; ".join([f"{crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
         
