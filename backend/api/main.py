@@ -260,16 +260,14 @@ def get_insights(request: InsightsRequest):
         
         delitos_str = "; ".join([f"{crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
         
-        prompt_otimizado = (
-            f"Tarefa: Gerar análise de segurança em HTML para {local} ({periodo_str}).\n"
-            f"Dados: Total={total}; Delitos={delitos_str}\n"
-            "Estrutura Obrigatória:\n"
-            "<h4>Resumo da Situação</h4><p>[descreva o cenário de segurança da área]</p>\n"
-            "<h4>Principais Pontos de Atenção</h4><ul><li>[identifique o crime mais comum e comente possíveis fatores]</li><li>[identifique o segundo crime mais comum e comente]</li></ul>\n"
-            "<h4>Recomendações</h4><ul><li>Cidadãos: [dica prática]</li><li>Polícia: [sugestão de ação]</li><li>Políticas Públicas: [sugestão de política]</li></ul>"
+        prompt = (
+            f"HTML Seg:{local}({periodo_str}). Total={total};Delitos={delitos_str}\n"
+            "<h4>Resumo</h4><p>[cenário]</p>"
+            "<h4>Atenção</h4><ul><li>[crime 1:análise]</li><li>[crime 2:análise]</li></ul>"
+            "<h4>Recomendações</h4><ul><li>Cidadãos:[dica]</li><li>Polícia:[ação]</li><li>Poder Público:[política]</li></ul>"
         )
-        
-        body = {"contents": [{"parts": [{"text": prompt_otimizado}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
+
+        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
         headers = {"Content-Type": "application/json"}
 
         logging.info("Aguardando 1 segundo antes de chamar a API do Gemini para evitar limites de taxa.")
