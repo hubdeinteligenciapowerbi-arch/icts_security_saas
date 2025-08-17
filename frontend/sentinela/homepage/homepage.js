@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Constantes e Variáveis Globais
     const API_BASE_URL = "http://127.0.0.1:8000/api";
     const SAO_PAULO_VIEW = { center: [-22.19, -48.79], zoom: 7 };
     let map;
@@ -7,9 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let heatLayer;
     let currentView = 'bubbles';
     let lastGeoJsonData = null;
-    let userLocationMarker = null; // NOVO: Variável para guardar o marcador de localização
+    let userLocationMarker = null;
 
-    // Seleção de todos os elementos da página
     const spinnerOverlay = document.getElementById('spinner-overlay');
     const geralSearchInput = document.getElementById('geral-search-input');
     const voiceSearchButton = document.getElementById('voice-search-button');
@@ -32,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewIcon = document.getElementById('view-icon');
     const viewText = document.getElementById('view-text');
 
-    // Funções de UI (Spinner, Mensagens, Dark Mode)
     function showInfo(message, type = 'info') {
         infoMessage.className = `alert alert-${type} text-center`;
         infoMessage.textContent = message;
@@ -55,11 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function toggleDarkMode() {
         document.body.classList.toggle('dark-mode');
         const isDarkMode = document.body.classList.contains('dark-mode');
-        darkModeToggle.textContent = isDarkMode ? '☀️' : '�';
+        darkModeToggle.textContent = isDarkMode ? '☀️' : '🌙';
         localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
     }
 
-    // Funções do Mapa
     function inicializarMapa() {
         map = L.map('map').setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -122,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Função genérica para preencher seletores
     async function fetchAndPopulate(endpoint, selectElement, placeholder, transformFn) {
         selectElement.disabled = true;
         selectElement.innerHTML = `<option value="">A carregar...</option>`;
@@ -151,7 +146,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Funções de Busca e Filtro
     function handleGeneralSearch() {
         const searchTerm = geralSearchInput.value.trim().toUpperCase();
         if (!searchTerm) return;
@@ -194,35 +188,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function buscarInsights() {
-        insightsContent.innerHTML = '<p>Gerando insights, por favor aguarde...</p>';
-        insightsMessage.classList.remove('d-none');
-        showSpinner();
+async function buscarInsights() {
+    insightsContent.innerHTML = '<p class="text-center">Gerando análise, por favor aguarde...</p>';
+    insightsMessage.classList.remove('d-none');
+    showSpinner();
 
-        const body = {
-            periodo: selectPeriodo.value,
-            regiao: selectRegiao.value,
-            municipio: selectMunicipio.value,
-            bairro: selectBairro.value,
-            delito: selectCriminalidade.value
-        };
+    const body = {
+        periodo: selectPeriodo.value,
+        regiao: selectRegiao.value,
+        municipio: selectMunicipio.value,
+        bairro: selectBairro.value,
+        delito: selectCriminalidade.value
+    };
 
-        try {
-            const res = await fetch(`${API_BASE_URL}/insights`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.detail || `Erro ${res.status}`);
-            insightsContent.innerHTML = json.insights;
-        } catch (err) {
-            insightsContent.innerHTML = `<div class="alert alert-danger">Erro ao gerar insights: ${err.message}</div>`;
-        } finally {
-            hideSpinner();
+    try {
+        const res = await fetch(`${API_BASE_URL}/insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.detail || `Erro ${res.status}`);
         }
-    }
+        
+        if (data && data.detalhamento_ocorrencias && data.analise_curta && data.recomendacao_curta) {
+            
+            let detalhesHtml = '';
+            if (data.detalhamento_ocorrencias.length > 0) {
+                detalhesHtml = data.detalhamento_ocorrencias.map(item => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${item.tipo}
+                        <span class="badge bg-primary rounded-pill">${item.quantidade}</span>
+                    </li>
+                `).join(''); 
+            }
 
+            const insightsHtml = `
+                <div class="insight-item">
+                    <h5 class="insight-title">Ocorrências (${data.quantidade_total})</h5>
+                    <ul class="list-group list-group-flush">
+                        ${detalhesHtml}
+                    </ul>
+                </div>
+                <div class="insight-item mt-3">
+                    <h5 class="insight-title">Análise Curta</h5>
+                    <p>${data.analise_curta}</p>
+                </div>
+                <div class="insight-item mt-3">
+                    <h5 class="insight-title">Recomendação</h5>
+                    <p>${data.recomendacao_curta}</p>
+                </div>
+            `;
+            insightsContent.innerHTML = insightsHtml;
+
+        } else {
+            throw new Error("O formato da resposta da IA é inválido ou está incompleto.");
+        }
+
+    } catch (err) {
+        insightsContent.innerHTML = `<div class="alert alert-danger"><strong>Erro ao gerar insights:</strong> ${err.message}</div>`;
+        console.error("Falha na busca por insights:", err);
+    } finally {
+        hideSpinner();
+    }
+}
     function limparFiltros() {
         geralSearchInput.value = '';
         selectRegiao.value = '';
@@ -231,17 +263,15 @@ document.addEventListener('DOMContentLoaded', () => {
         selectCriminalidade.value = '';
         selectPeriodo.value = 'last_quarter';
 
-        // ALTERADO: Remove o marcador de localização do mapa, se ele existir
         if (userLocationMarker) {
             map.removeLayer(userLocationMarker);
-            userLocationMarker = null; // Limpa a referência
+            userLocationMarker = null;
         }
 
         selectMunicipio.dispatchEvent(new Event('change'));
         buscarOcorrencias();
     }
 
-    // --- INICIALIZAÇÃO E EVENT LISTENERS ---
     inicializarMapa();
 
     const itemTransform = item => ({ value: item.nome.toLowerCase(), text: item.nome });
@@ -282,7 +312,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
     darkModeToggle.addEventListener('click', toggleDarkMode);
 
-    // --- Lógica para Busca por Voz ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
@@ -312,21 +341,17 @@ document.addEventListener('DOMContentLoaded', () => {
         voiceSearchButton.title = 'Busca por voz não suportada neste navegador.';
     }
 
-    // --- Lógica para Geolocalização ---
     btnLocalizacao.addEventListener('click', () => {
         if (navigator.geolocation) {
             showInfo('Obtendo sua localização...', 'info');
             navigator.geolocation.getCurrentPosition(position => {
                 const { latitude, longitude } = position.coords;
 
-                // ALTERADO: Remove o marcador anterior, se existir
                 if (userLocationMarker) {
                     map.removeLayer(userLocationMarker);
                 }
 
                 map.setView([latitude, longitude], 15);
-
-                // ALTERADO: Armazena o novo marcador na variável
                 userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
 
                 hideInfo();
@@ -338,6 +363,5 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Carga inicial de dados
     buscarOcorrencias();
-}); 
+});

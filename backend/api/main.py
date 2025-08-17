@@ -6,35 +6,24 @@ import requests
 import json
 import logging
 import traceback
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
-from random import uniform
-import time 
+import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-api_key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g"  
+# Por segurança, é melhor carregar a chave da API a partir de um arquivo .env
+api_key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g"
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
 SSP_DATA_CACHE = None
 SSP_CACHE_EXPIRY = None
-
-def verificar_uso_de_creditos() -> float:
-    try:
-        simulated_usage = uniform(0.1, 0.99)
-        logging.info(f"Simulação: Uso de créditos atual em {simulated_usage:.2%}")
-        return simulated_usage
-    except Exception as e:
-        logging.error(f"Falha CRÍTICA ao verificar uso de créditos: {e}")
-        return 1.0
-
-USO_MAXIMO_PERMITIDO = 0.90
 
 def normalizar_str(s: str) -> str:
     if not isinstance(s, str):
@@ -192,10 +181,8 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
 
     if not df_filtrado.empty and pd.api.types.is_datetime64_any_dtype(df_filtrado['data_registro']):
         data_maxima = df_filtrado['data_registro'].max()
-        logging.info(f"Usando a data máxima da base de dados como referência: {data_maxima.strftime('%Y-%m-%d')}")
     else:
         data_maxima = datetime.now()
-        logging.warning(f"Não foi possível encontrar data máxima. Usando a data atual como referência: {data_maxima.strftime('%Y-%m-%d')}")
 
     if periodo == 'last_30_days':
         df_filtrado = df_filtrado[df_filtrado['data_registro'] >= (data_maxima - timedelta(days=30))]
@@ -222,89 +209,78 @@ def root():
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
     logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
-    if not api_key:
-        logging.error("ERRO FATAL: API_KEY não encontrada.")
+    if not api_key or "SUA_API_KEY" in api_key:
         raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
     
     try:
-        uso_atual = verificar_uso_de_creditos()
-        if uso_atual >= USO_MAXIMO_PERMITIDO:
-            logging.warning(f"Uso de créditos ({uso_atual:.2%}) atingiu ou excedeu o limite de {USO_MAXIMO_PERMITIDO:.2%}. Bloqueando requisição.")
-            raise HTTPException(
-                status_code=429,
-                detail=f"O limite de uso de {USO_MAXIMO_PERMITIDO:.0%} da plataforma foi atingido. Novas análises estão temporariamente bloqueadas."
-            )
-        logging.info("Uso de créditos OK. Prosseguindo com a geração de insights.")
-
         df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
 
         if df_filtrado.empty:
-            logging.warning("Nenhum dado encontrado para os filtros fornecidos.")
-            return {"insights": "<h4>Sem dados</h4><p>Não há ocorrências para os filtros selecionados.</p>"}
+            return {
+                "quantidade_total": 0,
+                "detalhamento_ocorrencias": [], 
+                "analise_curta": "Não há ocorrências para os filtros selecionados.",
+                "recomendacao_curta": "Ajuste os filtros para uma nova busca."
+            }
 
         total = len(df_filtrado)
         resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
         
-        local = "Estado de São Paulo"
+        local = "a localidade selecionada"
         if request.bairro and request.bairro.lower() != 'string':
-            local = f"Bairro {request.bairro.title()}"
+            local = f"o bairro {request.bairro.title()}"
         elif request.municipio and request.municipio.lower() != 'string':
-            local = f"Município de {request.municipio.title()}"
+            local = f"o município de {request.municipio.title()}"
         elif request.regiao and request.regiao.lower() != 'string':
-            local = f"Região de {request.regiao.title()}"
+            local = f"a região de {request.regiao.title()}"
 
         periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
-        periodo_str = periodo_map.get(request.periodo, "período não especificado")
+        periodo_str = periodo_map.get(request.periodo, "período")
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
-        delitos_str = "; ".join([f"{crime.replace('_', ' ').title()}: {qtd}" for crime, qtd in resumo_delitos.items()])
-        
+        detalhamento_lista = [{"tipo": crime.replace('_', ' ').title(), "quantidade": qtd} for crime, qtd in resumo_delitos.items()]
+        detalhamento_json_str = json.dumps(detalhamento_lista, ensure_ascii=False)
+
         prompt = (
-            f"HTML Seg:{local}({periodo_str}). Total={total};Delitos={delitos_str}\n"
-            "<h4>Resumo</h4><p>[cenário]</p>"
-            "<h4>Atenção</h4><ul><li>[crime 1:análise]</li><li>[crime 2:análise]</li></ul>"
-            "<h4>Recomendações</h4><ul><li>Cidadãos:[dica]</li><li>Polícia:[ação]</li><li>Poder Público:[política]</li></ul>"
+            "Aja como um analista de segurança pública. Sua tarefa é analisar os dados e retornar um objeto JSON. "
+            "Sua resposta DEVE ser apenas o objeto JSON, sem nenhum texto ou formatação adicional.\n\n"
+            "## DADOS PARA ANÁLISE:\n"
+            f"- Local: {local}\n"
+            f"- Período: {periodo_str}\n"
+            f"- Total de Ocorrências: {total}\n"
+            f"- Detalhamento dos Delitos (já em formato de lista JSON): {detalhamento_json_str}\n\n"
+            "{\n"
+            f'  "quantidade_total": {total},\n'
+            f'  "detalhamento_ocorrencias": {detalhamento_json_str},\n'
+            '  "analise_curta": "Gere uma análise de uma frase sobre o cenário criminal, destacando o principal delito.",\n'
+            '  "recomendacao_curta": "Gere uma recomendação de segurança de uma frase, curta e acionável para os cidadãos."\n'
+            "}"
         )
+        
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.6, "maxOutputTokens": 1024, "response_mime_type": "application/json",
+            }
+        }
 
-        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096}}
         headers = {"Content-Type": "application/json"}
-
-        logging.info("Aguardando 1 segundo antes de chamar a API do Gemini para evitar limites de taxa.")
-        time.sleep(1)
-
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
         response.raise_for_status()
-        result = response.json()
-
-        if "candidates" in result and result["candidates"] and "content" in result["candidates"][0]:
-            return {"insights": result["candidates"][0]["content"]["parts"][0]["text"]}
         
-        raise HTTPException(status_code=500, detail="Formato de resposta inesperado da API de IA.")
+        result_json_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        
+        analise_gerada = json.loads(result_json_text)
+        
+        return analise_gerada
 
-    except requests.exceptions.RequestException as e:
-        if e.response is not None:
-            if e.response.status_code == 429:
-                logging.warning("Atingido o limite de requisições da API do Gemini (Erro 429).")
-                raise HTTPException(
-                    status_code=429, 
-                    detail="Você atingiu o limite de requisições para a API de IA. Por favor, aguarde um minuto antes de tentar novamente."
-                )
-            
-            error_text = e.response.text
-            logging.error(f"Erro de comunicação com a API do Gemini. Status: {e.response.status_code}. Detalhe: {error_text}")
-            raise HTTPException(status_code=502, detail=f"Erro de comunicação com a API de IA (Status {e.response.status_code}).")
-        else:
-            logging.error(f"Erro de rede ao tentar contatar a API do Gemini: {e}")
-            raise HTTPException(status_code=503, detail="Não foi possível conectar à API de IA.")
-            
     except Exception as e:
+        logging.error(f"Ocorreu um erro inesperado: {str(e)}")
+        logging.error(traceback.format_exc())
         if isinstance(e, HTTPException):
             raise e
-        
-        logging.error(f"Ocorreu um erro interno inesperado: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Erro interno inesperado: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")
 
 @app.get("/api/ocorrencias")
 def ocorrencias(
@@ -371,4 +347,4 @@ def get_delitos():
         delitos_unicos = sorted(DF_GLOBAL['delito'].unique())
         return {"data": [{"nome": n.upper()} for n in delitos_unicos if n]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}") 
