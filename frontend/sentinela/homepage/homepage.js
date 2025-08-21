@@ -74,12 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!geojson || !geojson.features || geojson.features.length === 0) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
             if (!isFiltered) {
-                 map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+                map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
             }
             return;
         }
 
-        dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Passe o mouse sobre os pontos para ver o tipo de ocorrência.</p>';
+        dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Passe o mouse ou clique nos pontos para ver o tipo de ocorrência.</p>';
         const validPoints = geojson.features.map(feature => {
             const [lng, lat] = feature.geometry.coordinates;
             if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
@@ -100,7 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
             validPoints.forEach(point => {
                 const circle = L.circle([point.lat, point.lng], {
                     color: '#E60000', fillColor: '#f03', fillOpacity: 0.6, radius: 60, weight: 1
-                }).bindTooltip(`<b>Ocorrência:</b><br>${(point.delito || 'N/A').replace(/_/g, ' ').toUpperCase()}`);
+                })
+                .bindTooltip(`<b>Ocorrência:</b><br>${(point.delito || 'N/A').replace(/_/g, ' ').toUpperCase()}`)
+                .on('click', function(e) {
+                    const latlng = e.latlng;
+                    const zoomLevel = 16;
+                    map.setView(latlng, zoomLevel);
+                });
                 bubbleLayer.addLayer(circle);
             });
         } else {
@@ -188,73 +194,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-async function buscarInsights() {
-    insightsContent.innerHTML = '<p class="text-center">Gerando análise, por favor aguarde...</p>';
-    insightsMessage.classList.remove('d-none');
-    showSpinner();
+    async function buscarInsights() {
+        insightsContent.innerHTML = '<p class="text-center">Gerando análise, por favor aguarde...</p>';
+        insightsMessage.classList.remove('d-none');
+        showSpinner();
 
-    const body = {
-        periodo: selectPeriodo.value,
-        regiao: selectRegiao.value,
-        municipio: selectMunicipio.value,
-        bairro: selectBairro.value,
-        delito: selectCriminalidade.value
-    };
+        const body = {
+            periodo: selectPeriodo.value,
+            regiao: selectRegiao.value,
+            municipio: selectMunicipio.value,
+            bairro: selectBairro.value,
+            delito: selectCriminalidade.value
+        };
 
-    try {
-        const res = await fetch(`${API_BASE_URL}/insights`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        
-        const data = await res.json();
-        
-        if (!res.ok) {
-            throw new Error(data.detail || `Erro ${res.status}`);
-        }
-        
-        if (data && data.detalhamento_ocorrencias && data.analise_curta && data.recomendacao_curta) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/insights`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
             
-            let detalhesHtml = '';
-            if (data.detalhamento_ocorrencias.length > 0) {
-                detalhesHtml = data.detalhamento_ocorrencias.map(item => `
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        ${item.tipo}
-                        <span class="badge bg-primary rounded-pill">${item.quantidade}</span>
-                    </li>
-                `).join(''); 
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.detail || `Erro ${res.status}`);
+            }
+            
+            if (data && data.detalhamento_ocorrencias && data.analise_curta && data.recomendacao_curta) {
+                
+                let detalhesHtml = '';
+                if (data.detalhamento_ocorrencias.length > 0) {
+                    detalhesHtml = data.detalhamento_ocorrencias.map(item => `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            ${item.tipo}
+                            <span class="badge bg-primary rounded-pill">${item.quantidade}</span>
+                        </li>
+                    `).join(''); 
+                }
+
+                const insightsHtml = `
+                    <div class="insight-item">
+                        <h5 class="insight-title">Ocorrências (${data.quantidade_total})</h5>
+                        <ul class="list-group list-group-flush">
+                            ${detalhesHtml}
+                        </ul>
+                    </div>
+                    <div class="insight-item mt-3">
+                        <h5 class="insight-title">Análise</h5>
+                        <p>${data.analise_curta}</p>
+                    </div>
+                    <div class="insight-item mt-3">
+                        <h5 class="insight-title">Recomendação</h5>
+                        <p>${data.recomendacao_curta}</p>
+                    </div>
+                `;
+                insightsContent.innerHTML = insightsHtml;
+
+            } else {
+                throw new Error("O formato da resposta da IA é inválido ou está incompleto.");
             }
 
-            const insightsHtml = `
-                <div class="insight-item">
-                    <h5 class="insight-title">Ocorrências (${data.quantidade_total})</h5>
-                    <ul class="list-group list-group-flush">
-                        ${detalhesHtml}
-                    </ul>
-                </div>
-                <div class="insight-item mt-3">
-                    <h5 class="insight-title">Análise Curta</h5>
-                    <p>${data.analise_curta}</p>
-                </div>
-                <div class="insight-item mt-3">
-                    <h5 class="insight-title">Recomendação</h5>
-                    <p>${data.recomendacao_curta}</p>
-                </div>
-            `;
-            insightsContent.innerHTML = insightsHtml;
-
-        } else {
-            throw new Error("O formato da resposta da IA é inválido ou está incompleto.");
+        } catch (err) {
+            insightsContent.innerHTML = `<div class="alert alert-danger"><strong>Erro ao gerar insights:</strong> ${err.message}</div>`;
+            console.error("Falha na busca por insights:", err);
+        } finally {
+            hideSpinner();
         }
-
-    } catch (err) {
-        insightsContent.innerHTML = `<div class="alert alert-danger"><strong>Erro ao gerar insights:</strong> ${err.message}</div>`;
-        console.error("Falha na busca por insights:", err);
-    } finally {
-        hideSpinner();
     }
-}
+
     function limparFiltros() {
         geralSearchInput.value = '';
         selectRegiao.value = '';
