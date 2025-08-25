@@ -225,6 +225,7 @@ def get_insights(request: InsightsRequest):
 
         total = len(df_filtrado)
         resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
+        detalhamento_lista = [{"tipo": crime.replace('_', ' ').title(), "quantidade": qtd} for crime, qtd in resumo_delitos.items()]
         
         local = "a localidade selecionada"
         if request.bairro and request.bairro.lower() != 'string':
@@ -239,20 +240,16 @@ def get_insights(request: InsightsRequest):
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
-        detalhamento_lista = [{"tipo": crime.replace('_', ' ').title(), "quantidade": qtd} for crime, qtd in resumo_delitos.items()]
-        detalhamento_json_str = json.dumps(detalhamento_lista, ensure_ascii=False)
-
         prompt = (
-            "Aja como um analista de segurança pública. Sua tarefa é analisar os dados e retornar um objeto JSON. "
+            "Aja como um analista de segurança pública. Com base nos dados a seguir, gere um objeto JSON contendo apenas duas chaves: 'analise_curta' e 'recomendacao_curta'. "
             "Sua resposta DEVE ser apenas o objeto JSON, sem nenhum texto ou formatação adicional.\n\n"
             "## DADOS PARA ANÁLISE:\n"
             f"- Local: {local}\n"
             f"- Período: {periodo_str}\n"
             f"- Total de Ocorrências: {total}\n"
-            f"- Detalhamento dos Delitos (já em formato de lista JSON): {detalhamento_json_str}\n\n"
+            f"- Detalhamento dos Delitos: {json.dumps(detalhamento_lista, ensure_ascii=False)}\n\n"
+            "## FORMATO DE SAÍDA ESPERADO (APENAS O JSON):\n"
             "{\n"
-            f'  "quantidade_total": {total},\n'
-            f'  "detalhamento_ocorrencias": {detalhamento_json_str},\n'
             '  "analise_curta": "Gere uma análise de uma frase sobre o cenário criminal, destacando o principal delito.",\n'
             '  "recomendacao_curta": "Gere uma recomendação de segurança de uma frase, curta e acionável para os cidadãos."\n'
             "}"
@@ -271,9 +268,16 @@ def get_insights(request: InsightsRequest):
         
         result_json_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
         
-        analise_gerada = json.loads(result_json_text)
+        analise_parcial = json.loads(result_json_text)
         
-        return analise_gerada
+        resposta_final = {
+            "quantidade_total": total,
+            "detalhamento_ocorrencias": detalhamento_lista,
+            "analise_curta": analise_parcial.get("analise_curta", "Análise não pôde ser gerada."),
+            "recomendacao_curta": analise_parcial.get("recomendacao_curta", "Recomendação não pôde ser gerada.")
+        }
+        
+        return resposta_final
 
     except Exception as e:
         logging.error(f"Ocorreu um erro inesperado: {str(e)}")
@@ -281,6 +285,7 @@ def get_insights(request: InsightsRequest):
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")
+
 
 @app.get("/api/ocorrencias")
 def ocorrencias(
