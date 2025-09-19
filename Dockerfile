@@ -6,7 +6,6 @@ ENV PYTHONPATH=/app
 
 COPY requirements.txt .
 COPY main.py .
-COPY dados.csv .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
