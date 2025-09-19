@@ -151,7 +151,9 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
     if delito and delito.lower() != 'string': df_filtrado = df_filtrado[df_filtrado["delito"] == normalizar_str(delito)]
     return df_filtrado
 
-# Endpoints da API
+# --- Endpoints da API ---
+# TODOS OS ENDPOINTS DA API DEVEM VIR ANTES DA MONTAGEM DOS ARQUIVOS ESTÁTICOS
+
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
     if not api_key or "SUA_API_KEY" in api_key:
@@ -240,6 +242,6 @@ def get_delitos():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}")
 
-# Montagem dos arquivos estáticos. Deve vir DEPOIS dos endpoints da API para evitar conflitos.
-# Alterado para o caminho correto do frontend.
+# --- Montagem dos Arquivos Estáticos ---
+# Esta linha DEVE ser a última rota declarada para não conflitar com a API
 app.mount("/", StaticFiles(directory="frontend/sentinela/homepage", html=True), name="static")
