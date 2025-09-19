@@ -18,7 +18,6 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-# Por segurança, é melhor carregar a chave da API a partir de um arquivo .env
 api_key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g"
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
@@ -215,12 +214,6 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
         df_filtrado = df_filtrado[df_filtrado["delito"] == normalizar_str(delito)]
         
     return df_filtrado
-
-# Endpoints da API vêm primeiro
-@app.get("/")
-def root():
-    return {"message": "API de Dados de Segurança Pública está em execução."}
-
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
     logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
@@ -368,5 +361,4 @@ def get_delitos():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}")
 
-# <-- 2. MONTAGEM DOS ARQUIVOS ESTÁTICOS (DEVE SER A ÚLTIMA COISA ANTES DOS ENDPOINTS DA API)
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
