@@ -8,6 +8,7 @@ import logging
 import traceback
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles # <-- 1. IMPORTAÇÃO ADICIONADA
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -34,28 +35,23 @@ def normalizar_str(s: str) -> str:
         .lower().strip()
 
 def carregar_e_preparar_dados():
-    logging.info("--- EXECUTANDO VERSÃO FINAL (DOWNLOAD EXTERNO) ---")
+    logging.info("--- EXECUTANDO VERSÃO PÚBLICA (DOWNLOAD EXTERNO SIMPLES) ---")
     
-    # URL do arquivo de dados hospedado no GitHub Releases
     CSV_URL = "https://github.com/DaviEmmerick/icts_security/releases/download/v1-data/dados.csv"
-    
-    # Em ambientes serverless como Vercel, /tmp é um diretório gravável
     csv_path = "/tmp/dados.csv"
-
-    # Verifica se o arquivo já foi baixado nesta execução para economizar tempo/banda
+    
     if not os.path.exists(csv_path):
         try:
             logging.info(f"Baixando dados de {CSV_URL} para {csv_path}...")
             response = requests.get(CSV_URL)
-            response.raise_for_status()  # Lança um erro se o download falhar
+            response.raise_for_status()
             
             with open(csv_path, 'wb') as f:
                 f.write(response.content)
-            logging.info("Download do arquivo de dados concluído com sucesso.")
+            logging.info("Download concluído com sucesso.")
         except Exception as e:
             sys.exit(f"ERRO CRÍTICO: Falha ao baixar o arquivo de dados: {e}")
 
-    # Continua o processo, lendo o arquivo que agora está no disco do contêiner
     try:
         df = pd.read_csv(csv_path, low_memory=False, encoding='cp1252', sep=';')
         logging.info("Arquivo dados.csv carregado com sucesso a partir do disco.")
@@ -75,21 +71,25 @@ def carregar_e_preparar_dados():
     if colunas_faltando:
         sys.exit(f"ERRO CRÍTICO: As seguintes colunas essenciais não foram encontradas: {colunas_faltando}.")
 
-    # ... O RESTO DA SUA FUNÇÃO DE LIMPEZA CONTINUA A PARTIR DAQUI ...
     for col in ['municipio', 'regiao', 'bairro', 'delito']:
         df[col] = df[col].astype(str).apply(normalizar_str)
         
     logging.info("Iniciando limpeza de dados geográficos inconsistentes...")
+
     junk_geral = ['-', '0', '2', 'nan', 'a definir', '']
+    
     df = df[~df['bairro'].isin(junk_geral)]
     df = df[~df['bairro'].str.match(r'^\d+$')]
     df = df[~df['bairro'].str.match(r'^\d{5}-\d{3}$')]
     df = df[~df['bairro'].str.match(r'^\(.*\)$')]
     df = df[df['bairro'].str.len() > 2]
+
     df = df[~df['municipio'].isin(junk_geral)]
     df = df[df['municipio'].str.len() > 2]
+    
     df = df[~df['regiao'].isin(junk_geral)]
     df = df[df['regiao'].str.len() > 2]
+
     logging.info("Limpeza de dados inconsistentes concluída.")
         
     for col in ['latitude', 'longitude']:
@@ -124,7 +124,6 @@ def carregar_e_preparar_dados():
 
 DF_GLOBAL = carregar_e_preparar_dados()
 
-# ... O RESTO DO SEU CÓDIGO (get_ssp_locais_df, app = FastAPI(), endpoints, etc.) CONTINUA ABAIXO SEM ALTERAÇÕES ...
 def get_ssp_locais_df():
     global SSP_DATA_CACHE, SSP_CACHE_EXPIRY
     
@@ -217,6 +216,7 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
         
     return df_filtrado
 
+# Endpoints da API vêm primeiro
 @app.get("/")
 def root():
     return {"message": "API de Dados de Segurança Pública está em execução."}
@@ -301,7 +301,6 @@ def get_insights(request: InsightsRequest):
             raise e
         raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")
 
-
 @app.get("/api/ocorrencias")
 def ocorrencias(
     periodo: str = Query("last_quarter", enum=["last_30_days", "last_quarter", "all_2025"]), 
@@ -368,3 +367,6 @@ def get_delitos():
         return {"data": [{"nome": n.upper()} for n in delitos_unicos if n]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}")
+
+# <-- 2. MONTAGEM DOS ARQUIVOS ESTÁTICOS (DEVE SER A ÚLTIMA COISA ANTES DOS ENDPOINTS DA API)
+app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
