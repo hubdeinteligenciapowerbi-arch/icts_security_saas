@@ -34,7 +34,6 @@ def normalizar_str(s: str) -> str:
         .lower().strip()
 
 def carregar_e_preparar_dados():
-    # LINHA DE DEPURAÇÃO ADICIONADA:
     logging.info("--- EXECUTANDO VERSÃO NOVA DO CÓDIGO COM RENOMEAÇÃO DE COLUNAS v2 ---")
     
     try:
@@ -42,6 +41,10 @@ def carregar_e_preparar_dados():
         csv_path = os.path.join(here, "dados.csv")
         df = pd.read_csv(csv_path, low_memory=False, encoding='cp1252', sep=';')
         logging.info("Arquivo dados.csv carregado com sucesso.")
+
+        # LOG ADICIONADO PARA VER AS COLUNAS ORIGINAIS
+        logging.info(f"Colunas ANTES do rename: {list(df.columns)}")
+
     except FileNotFoundError:
         sys.exit("ERRO CRÍTICO: O arquivo 'dados.csv' não foi encontrado.")
     except Exception as e:
@@ -53,6 +56,9 @@ def carregar_e_preparar_dados():
         'ANO_ESTATISTICA': 'ano', 'DATA_REGISTRO': 'data_registro'
     }
     df.rename(columns=mapa_colunas, inplace=True)
+
+    # LOG ADICIONADO PARA VER O RESULTADO DA RENOMEAÇÃO
+    logging.info(f"Colunas DEPOIS do rename: {list(df.columns)}")
 
     colunas_essenciais = ['municipio', 'regiao', 'bairro', 'delito', 'latitude', 'longitude', 'ano', 'data_registro']
     
