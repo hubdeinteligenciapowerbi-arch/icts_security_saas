@@ -34,6 +34,9 @@ def normalizar_str(s: str) -> str:
         .lower().strip()
 
 def carregar_e_preparar_dados():
+    # LINHA DE DEPURAÇÃO ADICIONADA:
+    logging.info("--- EXECUTANDO VERSÃO NOVA DO CÓDIGO COM RENOMEAÇÃO DE COLUNAS v2 ---")
+    
     try:
         here = os.path.dirname(os.path.abspath(__file__))
         csv_path = os.path.join(here, "dados.csv")
@@ -352,4 +355,4 @@ def get_delitos():
         delitos_unicos = sorted(DF_GLOBAL['delito'].unique())
         return {"data": [{"nome": n.upper()} for n in delitos_unicos if n]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}") 
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de delito: {e}")
