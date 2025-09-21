@@ -1,13 +1,15 @@
-document.addEventListener('DOMContentLoaded', async () => {
-    const API_BASE_URL = "http://127.0.0.1:8000/api";
+document.addEventListener('DOMContentLoaded', () => {
+    // --- CONFIGURAÇÃO ---
+    const IS_LOCAL = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+    const API_BASE_URL = IS_LOCAL ? "http://127.0.0.1:8000/api" : "/api";
     const SAO_PAULO_VIEW = { center: [-22.19, -48.79], zoom: 7 };
-    let map;
-    let bubbleLayer;
-    let heatLayer;
+
+    // --- VARIÁVEIS ---
+    let map, bubbleLayer, heatLayer, userLocationMarker = null;
     let currentView = 'bubbles';
     let lastGeoJsonData = null;
-    let userLocationMarker = null;
 
+    // --- DOM ---
     const spinnerOverlay = document.getElementById('spinner-overlay');
     const geralSearchInput = document.getElementById('geral-search-input');
     const voiceSearchButton = document.getElementById('voice-search-button');
@@ -30,79 +32,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     const viewIcon = document.getElementById('view-icon');
     const viewText = document.getElementById('view-text');
 
-    function showInfo(message, type = 'info') {
+    // Botão hambúrguer e menu
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const mainMenu = document.getElementById('main-menu');
+
+    // --- UI ---
+    const showInfo = (msg, type = 'info') => {
         infoMessage.className = `alert alert-${type} text-center`;
-        infoMessage.textContent = message;
+        infoMessage.textContent = msg;
         infoMessage.classList.remove('d-none');
-        setTimeout(() => hideInfo(), 5000);
-    }
+        setTimeout(() => infoMessage.classList.add('d-none'), 5000);
+    };
 
-    function hideInfo() {
-        infoMessage.classList.add('d-none');
-    }
+    const showSpinner = () => spinnerOverlay.classList.remove('d-none');
+    const hideSpinner = () => spinnerOverlay.classList.add('d-none');
 
-    function showSpinner() {
-        spinnerOverlay.classList.remove('d-none');
-    }
-
-    function hideSpinner() {
-        spinnerOverlay.classList.add('d-none');
-    }
-
-    function toggleDarkMode() {
+    const toggleDarkMode = () => {
         document.body.classList.toggle('dark-mode');
-        const isDarkMode = document.body.classList.contains('dark-mode');
-        darkModeToggle.textContent = isDarkMode ? '☀️' : '🌙';
-        localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
-    }
+        const isDark = document.body.classList.contains('dark-mode');
+        darkModeToggle.textContent = isDark ? '☀️' : '🌙';
+        localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+    };
 
-    function inicializarMapa() {
+    // --- MAPA ---
+    const inicializarMapa = () => {
         map = L.map('map').setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
-
         bubbleLayer = L.layerGroup().addTo(map);
         heatLayer = L.heatLayer([], { radius: 20, blur: 15, maxZoom: 12 });
-    }
+    };
 
-    function renderDataOnMap(geojson, isFiltered) {
+    const renderDataOnMap = (geojson, isFiltered) => {
         lastGeoJsonData = geojson;
         bubbleLayer.clearLayers();
         heatLayer.setLatLngs([]);
 
-        if (!geojson || !geojson.features || geojson.features.length === 0) {
+        if (!geojson?.features?.length) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
             if (!isFiltered) map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
             return;
         }
 
-        dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Passe o mouse ou clique nos pontos para ver o tipo de ocorrência.</p>';
+        const validPoints = geojson.features
+            .map(f => {
+                const [lng, lat] = f.geometry.coordinates;
+                return (lat && lng) ? { lat, lng, delito: f.properties.delito } : null;
+            })
+            .filter(Boolean);
 
-        const validPoints = geojson.features.map(feature => {
-            const [lng, lat] = feature.geometry.coordinates;
-            if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
-                return { lat, lng, delito: feature.properties.delito };
-            }
-            return null;
-        }).filter(Boolean);
-
-        if (validPoints.length === 0) {
-            dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado com coordenadas válidas.</p>';
-            return;
-        }
+        if (!validPoints.length) return;
 
         if (currentView === 'bubbles') {
             if (!map.hasLayer(bubbleLayer)) map.addLayer(bubbleLayer);
             if (map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
 
-            validPoints.forEach(point => {
-                const circle = L.circle([point.lat, point.lng], {
-                    color: '#E60000', fillColor: '#f03', fillOpacity: 0.6, radius: 60, weight: 1
-                })
-                .bindTooltip(`<b>Ocorrência:</b><br>${(point.delito || 'N/A').replace(/_/g, ' ').toUpperCase()}`)
-                .on('click', (e) => map.setView(e.latlng, 16));
-                bubbleLayer.addLayer(circle);
+            validPoints.forEach(p => {
+                L.circle([p.lat, p.lng], { color: '#E60000', fillColor: '#f03', fillOpacity: 0.6, radius: 60 })
+                    .bindTooltip(`<b>Ocorrência:</b><br>${(p.delito || 'N/A').replace(/_/g, ' ').toUpperCase()}`)
+                    .on('click', e => map.setView(e.latlng, 16))
+                    .addTo(bubbleLayer);
             });
         } else {
             if (!map.hasLayer(heatLayer)) map.addLayer(heatLayer);
@@ -110,253 +100,155 @@ document.addEventListener('DOMContentLoaded', async () => {
             heatLayer.setLatLngs(validPoints.map(p => [p.lat, p.lng, 1.0]));
         }
 
-        if (isFiltered && validPoints.length > 0) {
+        if (isFiltered) {
             const bounds = L.latLngBounds(validPoints.map(p => [p.lat, p.lng]));
             if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-        } else if (!isFiltered) {
-            map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         }
-    }
+    };
 
-    async function fetchAndPopulate(endpoint, selectElement, placeholder, transformFn) {
-        selectElement.disabled = true;
-        selectElement.innerHTML = `<option value="">A carregar...</option>`;
+    // --- API ---
+    const fetchAndPopulate = async (endpoint, select, placeholder, transformFn = i => ({ value: i.nome.toLowerCase(), text: i.nome })) => {
+        select.disabled = true;
+        select.innerHTML = `<option>A carregar...</option>`;
         try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`);
-            if (!response.ok) throw new Error(`Falha na resposta da API: ${response.statusText}`);
-            const { data } = await response.json();
-            selectElement.innerHTML = '';
-            if (data && data.length > 0) {
-                selectElement.innerHTML = `<option value="">-- ${placeholder} --</option>`;
-                data.forEach(item => {
-                    const option = document.createElement('option');
-                    const transformedItem = transformFn(item);
-                    option.value = transformedItem.value;
-                    option.textContent = transformedItem.text;
-                    selectElement.appendChild(option);
+            const res = await fetch(`${API_BASE_URL}${endpoint}`);
+            const { data } = await res.json();
+            select.innerHTML = `<option value="">-- ${placeholder} --</option>`;
+            if (data?.length) {
+                data.forEach(i => {
+                    const t = transformFn(i);
+                    const opt = document.createElement('option');
+                    opt.value = t.value;
+                    opt.textContent = t.text;
+                    select.appendChild(opt);
                 });
-                selectElement.disabled = false;
+                select.disabled = false;
             } else {
-                selectElement.innerHTML = `<option value="">Nenhum dado</option>`;
+                select.innerHTML = `<option>Nenhum dado</option>`;
             }
-        } catch (error) {
-            console.error(`Erro ao buscar ${endpoint}:`, error);
-            showInfo(`Não foi possível carregar ${placeholder.toLowerCase()}.`, 'danger');
-            selectElement.innerHTML = `<option value="">Erro ao carregar</option>`;
+        } catch {
+            showInfo(`Erro ao carregar ${placeholder}`, 'danger');
+            select.innerHTML = `<option>Erro</option>`;
         }
-    }
+    };
 
-    function handleGeneralSearch() {
-        const searchTerm = geralSearchInput.value.trim().toUpperCase();
-        if (!searchTerm) return;
-        let found = false;
-        for (const sel of [selectBairro, selectMunicipio, selectRegiao]) {
-            for (const option of sel.options) {
-                if (option.textContent.toUpperCase() === searchTerm) {
-                    sel.value = option.value;
-                    found = true;
-                    break;
-                }
-            }
-            if (found) break;
-        }
-        if (found) buscarOcorrencias();
-        else showInfo("Local não encontrado nos filtros.", "warning");
-    }
-
-    async function buscarOcorrencias() {
+    const buscarOcorrencias = async () => {
         showSpinner();
-        const params = new URLSearchParams();
-        if (selectPeriodo.value) params.set('periodo', selectPeriodo.value);
-        if (selectRegiao.value) params.set('regiao', selectRegiao.value);
-        if (selectMunicipio.value) params.set('municipio', selectMunicipio.value);
-        if (selectBairro.value) params.set('bairro', selectBairro.value);
-        if (selectCriminalidade.value) params.set('delito', selectCriminalidade.value);
-
-        const isFiltered = !!(selectRegiao.value || selectMunicipio.value || selectBairro.value || selectCriminalidade.value);
-
+        const params = new URLSearchParams({
+            periodo: selectPeriodo.value || 'last_quarter',
+            ...(selectRegiao.value && { regiao: selectRegiao.value }),
+            ...(selectMunicipio.value && { municipio: selectMunicipio.value }),
+            ...(selectBairro.value && { bairro: selectBairro.value }),
+            ...(selectCriminalidade.value && { delito: selectCriminalidade.value })
+        });
         try {
             const res = await fetch(`${API_BASE_URL}/ocorrencias?${params}`);
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.detail || 'Erro na API');
-            renderDataOnMap(json.geojson, isFiltered);
+            const data = await res.json();
+            renderDataOnMap(data.geojson, params.size > 1);
         } catch (err) {
             showInfo(`Erro: ${err.message}`, 'danger');
-            dadosSegurancaDiv.innerHTML = '<p class="text-danger text-center">Falha ao carregar dados.</p>';
         } finally {
             hideSpinner();
         }
-    }
+    };
 
-    async function buscarInsights() {
-        insightsContent.innerHTML = '<p class="text-center">Gerando análise, por favor aguarde...</p>';
+    // --- INSIGHTS ---
+    const buscarInsights = async () => {
+        insightsContent.innerHTML = '<p>Aguarde...</p>';
         insightsMessage.classList.remove('d-none');
         showSpinner();
-
-        const body = {
-            periodo: selectPeriodo.value,
-            regiao: selectRegiao.value,
-            municipio: selectMunicipio.value,
-            bairro: selectBairro.value,
-            delito: selectCriminalidade.value
-        };
-
         try {
             const res = await fetch(`${API_BASE_URL}/insights`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify({
+                    periodo: selectPeriodo.value,
+                    regiao: selectRegiao.value,
+                    municipio: selectMunicipio.value,
+                    bairro: selectBairro.value,
+                    delito: selectCriminalidade.value
+                })
             });
-            
             const data = await res.json();
-            
-            if (!res.ok) {
-                throw new Error(data.detail || `Erro ${res.status}`);
-            }
-            
-            if (data && data.detalhamento_ocorrencias && data.analise_curta && data.recomendacao_curta) {
-                
-                let detalhesHtml = '';
-                if (data.detalhamento_ocorrencias.length > 0) {
-                    detalhesHtml = data.detalhamento_ocorrencias.map(item => `
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            ${item.tipo}
-                            <span class="badge bg-primary rounded-pill">${item.quantidade}</span>
-                        </li>
-                    `).join(''); 
-                }
-
-                const insightsHtml = `
-                    <div class="insight-item">
-                        <h5 class="insight-title">Ocorrências (${data.quantidade_total})</h5>
-                        <ul class="list-group list-group-flush">
-                            ${detalhesHtml}
-                        </ul>
-                    </div>
-                    <div class="insight-item mt-3">
-                        <h5 class="insight-title">Análise</h5>
-                        <p>${data.analise_curta}</p>
-                    </div>
-                    <div class="insight-item mt-3">
-                        <h5 class="insight-title">Recomendação</h5>
-                        <p>${data.recomendacao_curta}</p>
-                    </div>
-                `;
-                insightsContent.innerHTML = insightsHtml;
-
-            } else {
-                throw new Error("O formato da resposta da IA é inválido ou está incompleto.");
-            }
-
+            insightsContent.innerHTML = `
+                <h5>Ocorrências: ${data.quantidade_total}</h5>
+                <ul>${data.detalhamento_ocorrencias.map(i => `<li>${i.tipo} - ${i.quantidade}</li>`).join('')}</ul>
+                <p><b>Análise:</b> ${data.analise_curta}</p>
+                <p><b>Recomendação:</b> ${data.recomendacao_curta}</p>`;
         } catch (err) {
-            insightsContent.innerHTML = `<div class="alert alert-danger"><strong>Erro ao gerar insights:</strong> ${err.message}</div>`;
-            console.error("Falha na busca por insights:", err);
+            insightsContent.innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
         } finally {
             hideSpinner();
         }
-    }
+    };
 
-    function limparFiltros() {
-        geralSearchInput.value = '';
-        selectRegiao.value = '';
-        selectMunicipio.value = '';
-        selectBairro.value = '';
-        selectCriminalidade.value = '';
-        selectPeriodo.value = 'last_quarter';
+ 
+const toggleMenu = () => {
+    const mapControls = document.getElementById("map-view-controls");
+    const isMobile = window.innerWidth <= 992;
 
-        if (userLocationMarker) {
-            map.removeLayer(userLocationMarker);
-            userLocationMarker = null;
-        }
+    mainMenu.classList.toggle("open");
+    hamburgerBtn.classList.toggle("active");
 
-        selectMunicipio.dispatchEvent(new Event('change'));
-        buscarOcorrencias();
-    }
-
-    // Inicialização do mapa
-    inicializarMapa();
-
-    const itemTransform = item => ({ value: item.nome.toLowerCase(), text: item.nome });
-
-    // Carrega selects e aguarda todos antes de buscar ocorrências
-    await Promise.all([
-        fetchAndPopulate('/regioes', selectRegiao, 'Todas as Delegacias', itemTransform),
-        fetchAndPopulate('/municipios', selectMunicipio, 'Todos os Municípios', itemTransform),
-        fetchAndPopulate('/bairros', selectBairro, 'Todos os Bairros', itemTransform),
-        fetchAndPopulate('/delitos', selectCriminalidade, 'Todos os Crimes', itemTransform)
-    ]);
-
-    buscarOcorrencias();
-
-    // Event listeners
-    selectRegiao.addEventListener('change', () => {
-        const endpoint = selectRegiao.value ? `/municipios?regiao=${encodeURIComponent(selectRegiao.value)}` : '/municipios';
-        fetchAndPopulate(endpoint, selectMunicipio, 'Todos os Municípios', itemTransform);
-        selectBairro.innerHTML = '<option value="">-- Selecione um município --</option>';
-        selectBairro.disabled = true;
-    });
-
-    selectMunicipio.addEventListener('change', () => {
-        const endpoint = selectMunicipio.value ? `/bairros?municipio=${encodeURIComponent(selectMunicipio.value)}` : '/bairros';
-        fetchAndPopulate(endpoint, selectBairro, 'Todos os Bairros', itemTransform);
-    });
-
-    geralSearchInput.addEventListener('keyup', (event) => { if (event.key === 'Enter') handleGeneralSearch(); });
-    btnBuscar.addEventListener('click', () => { geralSearchInput.value.trim() ? handleGeneralSearch() : buscarOcorrencias(); });
-    btnLimpar.addEventListener('click', limparFiltros);
-    btnInsights.addEventListener('click', buscarInsights);
-    closeInsightsBtn.addEventListener('click', () => insightsMessage.classList.add('d-none'));
-
-    viewToggleBtn.addEventListener('click', () => {
-        currentView = currentView === 'bubbles' ? 'heatmap' : 'bubbles';
-        viewToggleBtn.title = currentView === 'bubbles' ? 'Alternar para Mapa de Calor' : 'Alternar para Ocorrências';
-        viewIcon.textContent = currentView === 'bubbles' ? '🔥' : '⚫';
-        viewText.textContent = currentView === 'bubbles' ? 'Mapa de Calor' : 'Ocorrências';
-        if (lastGeoJsonData) {
-            const isFiltered = !!(selectRegiao.value || selectMunicipio.value || selectBairro.value || selectCriminalidade.value);
-            renderDataOnMap(lastGeoJsonData, isFiltered);
-        }
-    });
-
-    if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
-    darkModeToggle.addEventListener('click', toggleDarkMode);
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'pt-BR';
-        recognition.interimResults = false;
-        voiceSearchButton.addEventListener('click', () => {
-            try { recognition.start(); showInfo("A ouvir...", "info"); } 
-            catch (error) { console.log("O reconhecimento já começou."); }
-        });
-        recognition.onresult = (event) => {
-            const text = event.results[event.results.length - 1][0].transcript;
-            geralSearchInput.value = text;
-            showInfo(`Você disse: "${text}". A buscar...`, "success");
-            setTimeout(handleGeneralSearch, 1000);
-        };
-        recognition.onspeechend = () => { recognition.stop(); hideInfo(); };
-        recognition.onerror = (event) => { showInfo(`Erro na busca por voz: ${event.error}`, "danger"); };
-    } else {
-        voiceSearchButton.disabled = true;
-        voiceSearchButton.title = 'Busca por voz não suportada neste navegador.';
-    }
-
-    btnLocalizacao.addEventListener('click', () => {
-        if (navigator.geolocation) {
-            showInfo('Obtendo sua localização...', 'info');
-            navigator.geolocation.getCurrentPosition(position => {
-                const { latitude, longitude } = position.coords;
-
-                if (userLocationMarker) map.removeLayer(userLocationMarker);
-
-                map.setView([latitude, longitude], 15);
-                userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
-                hideInfo();
-            }, () => { showInfo('Não foi possível obter sua localização.', 'danger'); });
+    if (isMobile) {
+        if (mainMenu.classList.contains("open")) {
+            mapControls.style.display = "none";
         } else {
-            showInfo('Geolocalização não é suportada por este navegador.', 'warning');
+            mapControls.style.display = "block";
         }
-    });
+    }
+};
+
+// Fecha o menu automaticamente ao clicar em algum filtro no mobile
+const closeMenuOnFilterClick = () => {
+    if (window.innerWidth <= 992 && mainMenu.classList.contains("open")) {
+        toggleMenu();
+    }
+};
+
+
+    // --- EVENTOS ---
+    const initEventListeners = () => {
+        selectRegiao.addEventListener('change', () => {
+            fetchAndPopulate(`/municipios?regiao=${selectRegiao.value}`, selectMunicipio, 'Municípios');
+            selectBairro.innerHTML = '<option>Selecione município</option>';
+        });
+
+        selectMunicipio.addEventListener('change', () => {
+            fetchAndPopulate(`/bairros?municipio=${selectMunicipio.value}`, selectBairro, 'Bairros');
+        });
+
+        geralSearchInput.addEventListener('keyup', e => { if (e.key === 'Enter') buscarOcorrencias(); });
+        btnBuscar.addEventListener('click', buscarOcorrencias);
+        btnLimpar.addEventListener('click', () => { selectPeriodo.value = 'last_quarter'; buscarOcorrencias(); });
+        btnInsights.addEventListener('click', buscarInsights);
+        closeInsightsBtn.addEventListener('click', () => insightsMessage.classList.add('d-none'));
+        viewToggleBtn.addEventListener('click', () => {
+            currentView = currentView === 'bubbles' ? 'heatmap' : 'bubbles';
+            renderDataOnMap(lastGeoJsonData, true);
+        });
+        darkModeToggle.addEventListener('click', toggleDarkMode);
+        btnLocalizacao.addEventListener('click', () => navigator.geolocation.getCurrentPosition(p => {
+            const { latitude, longitude } = p.coords;
+            if (userLocationMarker) map.removeLayer(userLocationMarker);
+            map.setView([latitude, longitude], 15);
+            userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
+        }));
+
+        hamburgerBtn.addEventListener('click', toggleMenu);
+    };
+
+    // --- INIT ---
+    const initApp = () => {
+        inicializarMapa();
+        initEventListeners();
+        fetchAndPopulate('/regioes', selectRegiao, 'Delegacias');
+        fetchAndPopulate('/municipios', selectMunicipio, 'Municípios');
+        fetchAndPopulate('/bairros', selectBairro, 'Bairros');
+        fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes');
+        buscarOcorrencias();
+        if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
+    };
+
+    initApp();
 });
