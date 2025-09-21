@@ -5,30 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ICTS Guardian</title>
   
-  <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <!-- Estilos -->
   <link rel="stylesheet" href="homepage.css">
 </head>
 <body>
-  <!-- Tela de carregamento -->
   <div id="spinner-overlay" class="d-none">
     <div class="spinner"></div>
   </div>
 
-  <!-- Botão hamburguer (mobile) -->
-  <button class="menu-toggle-btn" id="menu-toggle">☰</button>
+  <button class="menu-toggle-btn" id="hamburger-btn">☰</button>
 
-  <!-- Sidebar -->
-  <div class="sidebar" id="sidebar">
+  <div class="sidebar" id="main-menu">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div class="sidebar-logo">
         <img src="https://ictssecurity.com.br/wp-content/uploads/2024/03/logo-icts-security.svg" draggable="false"
-             alt="Logo ICTS Security" style="height: 40px;" />
+              alt="Logo ICTS Security" style="height: 40px;" />
       </div>
       <button class="btn borderless-btn" id="dark-mode-toggle" title="Alternar Tema" style="font-size: 1.3rem;">🌙</button>
     </div>
@@ -101,7 +95,6 @@
     </div>
   </div>
 
-  <!-- Mapa -->
   <div id="map">
     <div id="map-view-controls">
       <button id="view-toggle-btn" class="btn btn-light btn-sm" title="Alternar para Mapa de Calor">
@@ -110,17 +103,11 @@
     </div>
   </div>
 
-  <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   
   <script src="homepage.js" defer></script>
 
-  <script>
-    document.getElementById("menu-toggle").addEventListener("click", () => {
-      document.getElementById("sidebar").classList.toggle("open");
-    });
-  </script>
-</body>
+  </body>
 </html>
