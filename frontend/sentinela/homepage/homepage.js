@@ -238,17 +238,26 @@ const closeMenuOnFilterClick = () => {
         hamburgerBtn.addEventListener('click', toggleMenu);
     };
 
-    // --- INIT ---
-    const initApp = () => {
-        inicializarMapa();
-        initEventListeners();
-        fetchAndPopulate('/regioes', selectRegiao, 'Delegacias');
-        fetchAndPopulate('/municipios', selectMunicipio, 'Municípios');
-        fetchAndPopulate('/bairros', selectBairro, 'Bairros');
-        fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes');
-        buscarOcorrencias();
-        if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
-    };
+const initApp = async () => {
+    inicializarMapa();
+    initEventListeners();
 
-    initApp();
+    // Aguarda todos os selects carregarem
+    await Promise.all([
+        fetchAndPopulate('/regioes', selectRegiao, 'Delegacias'),
+        fetchAndPopulate('/municipios', selectMunicipio, 'Municípios'),
+        fetchAndPopulate('/bairros', selectBairro, 'Bairros'),
+        fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes')
+    ]);
+
+    // Só busca ocorrências após os selects carregarem
+    buscarOcorrencias();
+
+    if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
+};
+
+// Chama a função para inicializar tudo
+initApp();
+
+
 });
