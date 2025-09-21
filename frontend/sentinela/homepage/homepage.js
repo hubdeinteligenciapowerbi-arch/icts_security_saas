@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const API_BASE_URL = "http://127.0.0.1:8000/api";
     const SAO_PAULO_VIEW = { center: [-22.19, -48.79], zoom: 7 };
     let map;
@@ -73,13 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!geojson || !geojson.features || geojson.features.length === 0) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
-            if (!isFiltered) {
-                map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
-            }
+            if (!isFiltered) map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
             return;
         }
 
         dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Passe o mouse ou clique nos pontos para ver o tipo de ocorrência.</p>';
+
         const validPoints = geojson.features.map(feature => {
             const [lng, lat] = feature.geometry.coordinates;
             if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
@@ -91,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (validPoints.length === 0) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado com coordenadas válidas.</p>';
             return;
-        };
+        }
 
         if (currentView === 'bubbles') {
             if (!map.hasLayer(bubbleLayer)) map.addLayer(bubbleLayer);
@@ -102,18 +101,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     color: '#E60000', fillColor: '#f03', fillOpacity: 0.6, radius: 60, weight: 1
                 })
                 .bindTooltip(`<b>Ocorrência:</b><br>${(point.delito || 'N/A').replace(/_/g, ' ').toUpperCase()}`)
-                .on('click', function(e) {
-                    const latlng = e.latlng;
-                    const zoomLevel = 16;
-                    map.setView(latlng, zoomLevel);
-                });
+                .on('click', (e) => map.setView(e.latlng, 16));
                 bubbleLayer.addLayer(circle);
             });
         } else {
             if (!map.hasLayer(heatLayer)) map.addLayer(heatLayer);
             if (map.hasLayer(bubbleLayer)) map.removeLayer(bubbleLayer);
-            const heatData = validPoints.map(p => [p.lat, p.lng, 1.0]);
-            heatLayer.setLatLngs(heatData);
+            heatLayer.setLatLngs(validPoints.map(p => [p.lat, p.lng, 1.0]));
         }
 
         if (isFiltered && validPoints.length > 0) {
@@ -279,14 +273,22 @@ document.addEventListener('DOMContentLoaded', () => {
         buscarOcorrencias();
     }
 
+    // Inicialização do mapa
     inicializarMapa();
 
     const itemTransform = item => ({ value: item.nome.toLowerCase(), text: item.nome });
-    fetchAndPopulate('/regioes', selectRegiao, 'Todas as Delegacias', itemTransform);
-    fetchAndPopulate('/municipios', selectMunicipio, 'Todos os Municípios', itemTransform);
-    fetchAndPopulate('/bairros', selectBairro, 'Todos os Bairros', itemTransform);
-    fetchAndPopulate('/delitos', selectCriminalidade, 'Todos os Crimes', itemTransform);
 
+    // Carrega selects e aguarda todos antes de buscar ocorrências
+    await Promise.all([
+        fetchAndPopulate('/regioes', selectRegiao, 'Todas as Delegacias', itemTransform),
+        fetchAndPopulate('/municipios', selectMunicipio, 'Todos os Municípios', itemTransform),
+        fetchAndPopulate('/bairros', selectBairro, 'Todos os Bairros', itemTransform),
+        fetchAndPopulate('/delitos', selectCriminalidade, 'Todos os Crimes', itemTransform)
+    ]);
+
+    buscarOcorrencias();
+
+    // Event listeners
     selectRegiao.addEventListener('change', () => {
         const endpoint = selectRegiao.value ? `/municipios?regiao=${encodeURIComponent(selectRegiao.value)}` : '/municipios';
         fetchAndPopulate(endpoint, selectMunicipio, 'Todos os Municípios', itemTransform);
@@ -325,10 +327,8 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.lang = 'pt-BR';
         recognition.interimResults = false;
         voiceSearchButton.addEventListener('click', () => {
-            try {
-                recognition.start();
-                showInfo("A ouvir...", "info");
-            } catch (error) { console.log("O reconhecimento já começou."); }
+            try { recognition.start(); showInfo("A ouvir...", "info"); } 
+            catch (error) { console.log("O reconhecimento já começou."); }
         });
         recognition.onresult = (event) => {
             const text = event.results[event.results.length - 1][0].transcript;
@@ -336,13 +336,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showInfo(`Você disse: "${text}". A buscar...`, "success");
             setTimeout(handleGeneralSearch, 1000);
         };
-        recognition.onspeechend = () => {
-            recognition.stop();
-            hideInfo();
-        };
-        recognition.onerror = (event) => {
-            showInfo(`Erro na busca por voz: ${event.error}`, "danger");
-        };
+        recognition.onspeechend = () => { recognition.stop(); hideInfo(); };
+        recognition.onerror = (event) => { showInfo(`Erro na busca por voz: ${event.error}`, "danger"); };
     } else {
         voiceSearchButton.disabled = true;
         voiceSearchButton.title = 'Busca por voz não suportada neste navegador.';
@@ -354,21 +349,14 @@ document.addEventListener('DOMContentLoaded', () => {
             navigator.geolocation.getCurrentPosition(position => {
                 const { latitude, longitude } = position.coords;
 
-                if (userLocationMarker) {
-                    map.removeLayer(userLocationMarker);
-                }
+                if (userLocationMarker) map.removeLayer(userLocationMarker);
 
                 map.setView([latitude, longitude], 15);
                 userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
-
                 hideInfo();
-            }, () => {
-                showInfo('Não foi possível obter sua localização.', 'danger');
-            });
+            }, () => { showInfo('Não foi possível obter sua localização.', 'danger'); });
         } else {
             showInfo('Geolocalização não é suportada por este navegador.', 'warning');
         }
     });
-
-    buscarOcorrencias();
 });
