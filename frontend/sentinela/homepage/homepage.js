@@ -182,30 +182,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
- 
-const toggleMenu = () => {
-    const mapControls = document.getElementById("map-view-controls");
-    const isMobile = window.innerWidth <= 992;
+    // --- MENU HAMBÚRGUER ---
+    const toggleMenu = () => {
+        const mapControls = document.getElementById("map-view-controls");
+        const isMobile = window.innerWidth <= 992;
 
-    mainMenu.classList.toggle("open");
-    hamburgerBtn.classList.toggle("active");
+        mainMenu.classList.toggle("open");
+        hamburgerBtn.classList.toggle("active");
 
-    if (isMobile) {
-        if (mainMenu.classList.contains("open")) {
-            mapControls.style.display = "none";
-        } else {
-            mapControls.style.display = "block";
+        if (isMobile) {
+            if (mainMenu.classList.contains("open")) {
+                mapControls.style.display = "none";
+            } else {
+                mapControls.style.display = "block";
+            }
         }
-    }
-};
+    };
 
-// Fecha o menu automaticamente ao clicar em algum filtro no mobile
-const closeMenuOnFilterClick = () => {
-    if (window.innerWidth <= 992 && mainMenu.classList.contains("open")) {
-        toggleMenu();
-    }
-};
-
+    const closeMenuOnFilterClick = () => {
+        if (window.innerWidth <= 992 && mainMenu.classList.contains("open")) {
+            toggleMenu();
+        }
+    };
 
     // --- EVENTOS ---
     const initEventListeners = () => {
@@ -220,14 +218,35 @@ const closeMenuOnFilterClick = () => {
 
         geralSearchInput.addEventListener('keyup', e => { if (e.key === 'Enter') buscarOcorrencias(); });
         btnBuscar.addEventListener('click', buscarOcorrencias);
-        btnLimpar.addEventListener('click', () => { selectPeriodo.value = 'last_quarter'; buscarOcorrencias(); });
+
+        btnLimpar.addEventListener('click', () => {
+            selectPeriodo.value = 'last_quarter';
+            selectRegiao.value = '';
+            selectMunicipio.value = '';
+            selectBairro.value = '';
+            selectCriminalidade.value = '';
+            buscarOcorrencias();
+
+            // Remove marcador de localização do usuário
+            if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+                userLocationMarker = null;
+            }
+
+            // Volta para visão inicial de São Paulo
+            map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+        });
+
         btnInsights.addEventListener('click', buscarInsights);
         closeInsightsBtn.addEventListener('click', () => insightsMessage.classList.add('d-none'));
+
         viewToggleBtn.addEventListener('click', () => {
             currentView = currentView === 'bubbles' ? 'heatmap' : 'bubbles';
             renderDataOnMap(lastGeoJsonData, true);
         });
+
         darkModeToggle.addEventListener('click', toggleDarkMode);
+
         btnLocalizacao.addEventListener('click', () => navigator.geolocation.getCurrentPosition(p => {
             const { latitude, longitude } = p.coords;
             if (userLocationMarker) map.removeLayer(userLocationMarker);
@@ -238,26 +257,22 @@ const closeMenuOnFilterClick = () => {
         hamburgerBtn.addEventListener('click', toggleMenu);
     };
 
-const initApp = async () => {
-    inicializarMapa();
-    initEventListeners();
+    // --- INICIALIZAÇÃO ---
+    const initApp = async () => {
+        inicializarMapa();
+        initEventListeners();
 
-    // Aguarda todos os selects carregarem
-    await Promise.all([
-        fetchAndPopulate('/regioes', selectRegiao, 'Delegacias'),
-        fetchAndPopulate('/municipios', selectMunicipio, 'Municípios'),
-        fetchAndPopulate('/bairros', selectBairro, 'Bairros'),
-        fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes')
-    ]);
+        await Promise.all([
+            fetchAndPopulate('/regioes', selectRegiao, 'Delegacias'),
+            fetchAndPopulate('/municipios', selectMunicipio, 'Municípios'),
+            fetchAndPopulate('/bairros', selectBairro, 'Bairros'),
+            fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes')
+        ]);
 
-    // Só busca ocorrências após os selects carregarem
-    buscarOcorrencias();
+        buscarOcorrencias();
 
-    if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
-};
+        if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
+    };
 
-// Chama a função para inicializar tudo
-initApp();
-
-
+    initApp();
 });
