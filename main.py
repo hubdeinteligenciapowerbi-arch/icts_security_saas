@@ -236,7 +236,7 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
         
     return df_filtrado
 
-@app.get("/")
+@app.get("/api/status")
 def root():
     return {"message": "API de Dados de Segurança Pública está em execução."}
 
