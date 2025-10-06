@@ -1,4 +1,5 @@
 :root {
+    font-size: 10px; 
     --bg-color: #ffffff;
     --sidebar-bg-color: #ffffff;
     --text-color: #212529;
@@ -16,7 +17,6 @@
     --font-family-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* ---------- DARK MODE ---------- */
 body.dark-mode {
     --bg-color: #1a1a1a;
     --sidebar-bg-color: #2c2c2c;
@@ -31,7 +31,14 @@ body.dark-mode {
     --map-filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
 }
 
-/* ---------- BASE LAYOUT ---------- */
+html {
+    box-sizing: border-box;
+}
+
+*, *:before, *:after {
+    box-sizing: inherit;
+}
+
 body {
     display: flex;
     height: 100vh;
@@ -45,8 +52,8 @@ body {
 }
 
 .sidebar {
-    width: 380px;
-    padding: 1.5rem;
+    width: clamp(300px, 22vw, 380px);
+    padding: 1.25rem;
     background-color: var(--sidebar-bg-color);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -54,6 +61,7 @@ body {
     overflow-y: auto;
     transition: all 0.3s ease-in-out;
     z-index: 1000;
+    flex-shrink: 0;
 }
 
 #map {
@@ -61,11 +69,11 @@ body {
     height: 100%;
 }
 
-/* ---------- FORM ELEMENTS ---------- */
 .form-control, .form-select {
     background-color: var(--form-bg-color);
     color: var(--form-text-color);
     border-color: var(--form-border-color);
+    font-size: 1rem;
 }
 
 .form-control::placeholder {
@@ -87,27 +95,27 @@ body {
     color: white;
     border: none;
     transition: transform 0.2s, box-shadow 0.2s;
+    padding: 0.6rem 1.2rem;
 }
 
 .btn-gradient:hover {
-    transform: translateY(-2.7px);
+    transform: translateY(-3px);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     color: white;
 }
 
 select.form-select option {
   font-size: 1rem;
-  padding: 10px 12px; 
+  padding: 0.5rem 0.75rem;
 }
 
-/* ---------- INSIGHTS POPUP ---------- */
 .insights-message {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 90%;
-    max-width: 600px;
+    max-width: 550px;
     background-color: var(--sidebar-bg-color);
     border-radius: 8px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
@@ -118,8 +126,8 @@ select.form-select option {
 
 .insights-message .close-btn {
     position: absolute;
-    top: 10px;
-    right: 15px;
+    top: 0.75rem;
+    right: 1rem;
     background: none;
     border: none;
     font-size: 1.5rem;
@@ -127,29 +135,27 @@ select.form-select option {
     color: var(--btn-outline-text);
 }
 
-/* ---------- MAP CONTROLS ---------- */
 #map-view-controls {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 1rem;
+    right: 1rem;
     z-index: 1000;
     background: var(--sidebar-bg-color);
-    padding: 5px;
+    padding: 0.5rem;
     border-radius: 5px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
 }
 
 #view-toggle-btn {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 0.5rem;
     font-weight: 500;
     background-color: var(--form-bg-color);
     color: var(--text-color);
     border-color: var(--border-color);
 }
 
-/* ---------- SPINNER ---------- */
 #spinner-overlay {
     position: fixed;
     top: 0;
@@ -164,10 +170,10 @@ select.form-select option {
 }
 
 .spinner {
-    width: 60px;
-    height: 60px;
-    border: 8px solid #f3f3f3;
-    border-top: 8px solid var(--primary-accent);
+    width: 50px;
+    height: 50px;
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid var(--primary-accent);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -177,7 +183,6 @@ select.form-select option {
     100% { transform: rotate(360deg); }
 }
 
-/* ---------- SEARCH ---------- */
 .search-container {
     position: relative;
 }
@@ -194,78 +199,21 @@ select.form-select option {
     z-index: 100;
 }
 
-/* ---------- MENU TOGGLE (hamburguer) ---------- */
 .menu-toggle-btn {
     display: none;
     position: absolute;
-    top: 15px;
-    left: 15px;
+    top: 1rem;
+    left: 1rem;
     z-index: 1100;
     background-color: var(--sidebar-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 5px;
-    padding: 8px 12px;
+    padding: 0.5rem 0.75rem;
     cursor: pointer;
     font-size: 1.2rem;
     color: var(--text-color);
 }
 
-/* ---------- RESPONSIVIDADE ---------- */
-
-/* Tablets */
-@media (max-width: 992px) {
-    body {
-        flex-direction: column;
-        overflow-y: auto;
-    }
-
-    .sidebar.open ~ #map #map-view-controls {
-    display: none !important;
-  }
-
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: -100%;
-        width: 280px;
-        height: 100%;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        border-right: none;
-    }
-
-    .sidebar.open {
-        left: 0;
-    }
-
-    #map {
-        width: 100%;
-    }
-
-    .menu-toggle-btn {
-        display: block;
-    }
-}
-
-/* Celulares */
-@media (max-width: 576px) {
-    .sidebar {
-        width: 100%;
-    }
-
-    #map {
-        height: 60vh;
-    }
-
-    .btn-gradient {
-        width: 100%;
-        text-align: center;
-    }
-}
-
-
-/* === ESTILOS PARA O NOVO PAINEL DE INSIGHTS === */
-
-/* Estrutura do item da lista */
 .crime-list {
     list-style: none;
     padding: 0;
@@ -276,9 +224,9 @@ select.form-select option {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 5px;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 14px;
+    padding: 0.6rem 0.3rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 1rem;
 }
 
 .crime-item:last-child {
@@ -288,54 +236,50 @@ select.form-select option {
 .crime-name {
     color: #555;
     flex-grow: 1;
-    margin-right: 10px;
+    margin-right: 1rem;
 }
 
 .crime-quantity {
     font-weight: bold;
     color: #1a73e8;
     background-color: #e8f0fe;
-    padding: 3px 8px;
+    padding: 0.2rem 0.5rem;
     border-radius: 12px;
-    font-size: 13px;
+    font-size: 0.9rem;
     white-space: nowrap;
 }
 
-/* Título para a lista Top 10 */
 .top-crimes-title {
-    font-size: 1rem;
+    font-size: clamp(1.1rem, 4vw, 1.2rem); 
     font-weight: 600;
-    margin-top: 15px;
-    margin-bottom: 5px;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
     color: #444;
 }
 
-/* Container que esconde/mostra a lista secundária */
 .more-crimes-container {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.5s ease-in-out;
-    border: 1px solid transparent; /* Evita 'pulos' na renderização */
+    border: 1px solid transparent;
     border-radius: 4px;
 }
 
-/* Classe que torna o container visível e rolável */
 .more-crimes-container.visible {
-    max-height: 200px; /* Altura máxima da área de scroll */
-    overflow-y: auto; /* A barra de rolagem só aparece se o conteúdo for maior */
-    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 1rem;
     border-color: #e0e0e0;
 }
 
-/* Botão "Ver Mais/Ver Menos" */
 #toggle-more-crimes {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     color: #007bff;
     cursor: pointer;
-    padding: 1px 12px;
-    font-size: 14px;
-    margin-top: 15px;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    margin-top: 1rem;
     display: block;
     width: 100%;
     border-radius: 4px;
@@ -348,21 +292,68 @@ select.form-select option {
     border-color: #ced4da;
 }
 
-/* Estilos para o modo escuro */
-body.dark-mode .crime-name {
-    color: #ccc;
-}
-body.dark-mode .crime-item {
-    border-bottom-color: #444;
-}
-body.dark-mode .top-crimes-title {
-    color: #ddd;
-}
+body.dark-mode .crime-name { color: #ccc; }
+body.dark-mode .crime-item { border-bottom-color: #444; }
+body.dark-mode .top-crimes-title { color: #ddd; }
 body.dark-mode #toggle-more-crimes {
     background-color: #3a3f44;
     border-color: #555;
     color: #58a6ff;
 }
-body.dark-mode .more-crimes-container.visible {
-    border-color: #555;
+body.dark-mode .more-crimes-container.visible { border-color: #555; }
+body.dark-mode .crime-quantity { background-color: #333; color: #a1c9ff; }
+
+@media (max-width: 992px) {
+    body {
+        overflow-y: auto;
+    }
+    
+    body.sidebar-open #map {
+      display: none;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 300px;
+        height: 100%;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        border-right: none;
+        transition: left 0.3s ease-in-out;
+    }
+
+    .sidebar.open {
+        left: 0;
+    }
+    
+    .menu-toggle-btn {
+        display: block;
+    }
+}
+
+@media (max-width: 576px) {
+    .sidebar {
+        width: 100%;
+    }
+
+    body:not(.sidebar-open) {
+        flex-direction: column;
+    }
+    
+    body:not(.sidebar-open) #map {
+        width: 100%;
+        height: 60vh;
+        flex-grow: 1;
+    }
+    
+    body.sidebar-open #map {
+      flex-grow: 0;
+      height: 0;
+    }
+
+    .btn-gradient {
+        width: 100%;
+        text-align: center;
+    }
 }
