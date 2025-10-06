@@ -20,7 +20,7 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-api_key = "AIzaSyAlqHxteKHGDoIw2Jn0PV9QC7eNduyFl9g"
+api_key = "AIzaSyCqrRwS_o3riYOrXRp6_RuAxMNJSo-31dQ"
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
@@ -246,6 +246,8 @@ def get_insights(request: InsightsRequest):
     if not api_key or "SUA_API_KEY" in api_key:
         raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
     
+    response = None 
+    
     try:
         df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
 
@@ -272,7 +274,7 @@ def get_insights(request: InsightsRequest):
         periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
         periodo_str = periodo_map.get(request.periodo, "período")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         
         prompt = (
             "Aja como um analista de segurança pública. Com base nos dados a seguir, gere um objeto JSON contendo apenas duas chaves: 'analise_curta' e 'recomendacao_curta'. "
@@ -300,7 +302,18 @@ def get_insights(request: InsightsRequest):
         response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
         response.raise_for_status()
         
-        result_json_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        data = response.json()
+        candidates = data.get("candidates")
+
+        if not candidates:
+            feedback = data.get("promptFeedback", {})
+            raise ValueError(f"A resposta da API do Gemini não retornou 'candidates'. Causa provável: {feedback}")
+
+        content = candidates[0].get("content", {}).get("parts", [{}])[0]
+        result_json_text = content.get("text")
+        
+        if not result_json_text:
+            raise ValueError("Não foi encontrado texto na resposta da API do Gemini.")
         
         analise_parcial = json.loads(result_json_text)
         
@@ -315,7 +328,12 @@ def get_insights(request: InsightsRequest):
 
     except Exception as e:
         logging.error(f"Ocorreu um erro inesperado: {str(e)}")
+        
+        if response is not None:
+            logging.error(f"Resposta da API (status {response.status_code}): {response.text}")
+        
         logging.error(traceback.format_exc())
+        
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")

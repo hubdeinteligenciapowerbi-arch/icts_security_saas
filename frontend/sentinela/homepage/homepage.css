@@ -261,3 +261,108 @@ select.form-select option {
         text-align: center;
     }
 }
+
+
+/* === ESTILOS PARA O NOVO PAINEL DE INSIGHTS === */
+
+/* Estrutura do item da lista */
+.crime-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.crime-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 5px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+}
+
+.crime-item:last-child {
+    border-bottom: none;
+}
+
+.crime-name {
+    color: #555;
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+.crime-quantity {
+    font-weight: bold;
+    color: #1a73e8;
+    background-color: #e8f0fe;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Título para a lista Top 10 */
+.top-crimes-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    color: #444;
+}
+
+/* Container que esconde/mostra a lista secundária */
+.more-crimes-container {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out;
+    border: 1px solid transparent; /* Evita 'pulos' na renderização */
+    border-radius: 4px;
+}
+
+/* Classe que torna o container visível e rolável */
+.more-crimes-container.visible {
+    max-height: 200px; /* Altura máxima da área de scroll */
+    overflow-y: auto; /* A barra de rolagem só aparece se o conteúdo for maior */
+    margin-top: 10px;
+    border-color: #e0e0e0;
+}
+
+/* Botão "Ver Mais/Ver Menos" */
+#toggle-more-crimes {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #007bff;
+    cursor: pointer;
+    padding: 1px 12px;
+    font-size: 14px;
+    margin-top: 15px;
+    display: block;
+    width: 100%;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: 500;
+}
+
+#toggle-more-crimes:hover {
+    background-color: #e9ecef;
+    border-color: #ced4da;
+}
+
+/* Estilos para o modo escuro */
+body.dark-mode .crime-name {
+    color: #ccc;
+}
+body.dark-mode .crime-item {
+    border-bottom-color: #444;
+}
+body.dark-mode .top-crimes-title {
+    color: #ddd;
+}
+body.dark-mode #toggle-more-crimes {
+    background-color: #3a3f44;
+    border-color: #555;
+    color: #58a6ff;
+}
+body.dark-mode .more-crimes-container.visible {
+    border-color: #555;
+}

@@ -5,11 +5,10 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 COPY requirements.txt .
-COPY main.py .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./frontend /app/frontend
+COPY . .
 
 EXPOSE 8000
 

@@ -31,8 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewToggleBtn = document.getElementById('view-toggle-btn');
     const viewIcon = document.getElementById('view-icon');
     const viewText = document.getElementById('view-text');
-
-    // Botão hambúrguer e menu
     const hamburgerBtn = document.getElementById('hamburger-btn');
     const mainMenu = document.getElementById('main-menu');
 
@@ -152,9 +150,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- INSIGHTS ---
+    // --- INSIGHTS (NOVA LÓGICA) ---
+    const popularInsightsPanel = (data) => {
+        if (!data || data.quantidade_total === undefined) {
+            insightsContent.innerHTML = `<div class="alert alert-warning">Não foi possível carregar os insights.</div>`;
+            return;
+        }
+
+        if (data.quantidade_total === 0) {
+            insightsContent.innerHTML = `
+                <div class="insights-header"><h5>Ocorrências: 0</h5></div>
+                <div class="insights-footer">
+                    <p><b>Análise:</b> ${data.analise_curta}</p>
+                    <p><b>Recomendação:</b> ${data.recomendacao_curta}</p>
+                </div>`;
+            return;
+        }
+
+        const sortedCrimes = [...data.detalhamento_ocorrencias].sort((a, b) => b.quantidade - a.quantidade);
+        const top10Crimes = sortedCrimes.slice(0, 5);
+        const otherCrimes = sortedCrimes.slice(10);
+
+        const createListItemHTML = crime => `
+            <li class="crime-item">
+                <span class="crime-name">${crime.tipo}</span>
+                <span class="crime-quantity">${crime.quantidade.toLocaleString('pt-BR')}</span>
+            </li>`;
+
+        const top10Html = top10Crimes.map(createListItemHTML).join('');
+        const otherHtml = otherCrimes.map(createListItemHTML).join('');
+
+        insightsContent.innerHTML = `
+            <div class="insights-header">
+                <h5>Ocorrências: ${data.quantidade_total.toLocaleString('pt-BR')}</h5>
+            </div>
+            <div class="insights-body">
+                <h6 class="top-crimes-title">Principais Ocorrências (Top 10)</h6>
+                <ul class="crime-list">${top10Html}</ul>
+                ${otherCrimes.length > 0 ? `<button id="toggle-more-crimes">Ver Mais (${otherCrimes.length})</button>` : ''}
+                <div class="more-crimes-container" id="more-crimes-container">
+                    <ul class="crime-list">${otherHtml}</ul>
+                </div>
+            </div>
+            <div class="insights-footer">
+                <p><b>Análise:</b> ${data.analise_curta}</p>
+                <p><b>Recomendação:</b> ${data.recomendacao_curta}</p>
+            </div>
+        `;
+
+        if (otherCrimes.length > 0) {
+            const toggleButton = document.getElementById('toggle-more-crimes');
+            const moreContainer = document.getElementById('more-crimes-container');
+            toggleButton.addEventListener('click', () => {
+                moreContainer.classList.toggle('visible');
+                const isVisible = moreContainer.classList.contains('visible');
+                toggleButton.textContent = isVisible ? 'Ver Menos' : `Ver Mais (${otherCrimes.length})`;
+            });
+        }
+    };
+
     const buscarInsights = async () => {
-        insightsContent.innerHTML = '<p>Aguarde...</p>';
+        insightsContent.innerHTML = '<div class="text-center p-3">Aguarde, gerando análise...</div>';
         insightsMessage.classList.remove('d-none');
         showSpinner();
         try {
@@ -169,14 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     delito: selectCriminalidade.value
                 })
             });
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail || 'Erro na comunicação com o servidor.');
+            }
             const data = await res.json();
-            insightsContent.innerHTML = `
-                <h5>Ocorrências: ${data.quantidade_total}</h5>
-                <ul>${data.detalhamento_ocorrencias.map(i => `<li>${i.tipo} - ${i.quantidade}</li>`).join('')}</ul>
-                <p><b>Análise:</b> ${data.analise_curta}</p>
-                <p><b>Recomendação:</b> ${data.recomendacao_curta}</p>`;
+            popularInsightsPanel(data); // Chama a nova função para renderizar o painel
         } catch (err) {
-            insightsContent.innerHTML = `<div class="alert alert-danger">Erro: ${err.message}</div>`;
+            insightsContent.innerHTML = `<div class="alert alert-danger">Erro ao gerar análise: ${err.message}</div>`;
         } finally {
             hideSpinner();
         }
@@ -209,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initEventListeners = () => {
         selectRegiao.addEventListener('change', () => {
             fetchAndPopulate(`/municipios?regiao=${selectRegiao.value}`, selectMunicipio, 'Municípios');
-            selectBairro.innerHTML = '<option>Selecione município</option>';
+            selectBairro.innerHTML = '<option value="">-- Bairros --</option>';
         });
 
         selectMunicipio.addEventListener('change', () => {
@@ -222,18 +278,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btnLimpar.addEventListener('click', () => {
             selectPeriodo.value = 'last_quarter';
             selectRegiao.value = '';
-            selectMunicipio.value = '';
-            selectBairro.value = '';
+            selectMunicipio.innerHTML = '<option value="">-- Municípios --</option>';
+            selectBairro.innerHTML = '<option value="">-- Bairros --</option>';
             selectCriminalidade.value = '';
             buscarOcorrencias();
 
-            // Remove marcador de localização do usuário
             if (userLocationMarker) {
                 map.removeLayer(userLocationMarker);
                 userLocationMarker = null;
             }
-
-            // Volta para visão inicial de São Paulo
             map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
         });
 
