@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!geojson?.features?.length) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
+            // Se não for uma busca filtrada (como a busca inicial), reseta a visão.
             if (!isFiltered) {
                 map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
             }
@@ -100,6 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             heatLayer.setLatLngs(validPoints.map(p => [p.lat, p.lng, 1.0]));
         }
 
+        // Apenas ajusta o zoom aos resultados se for uma busca filtrada
         if (isFiltered) {
             const bounds = L.latLngBounds(validPoints.map(p => [p.lat, p.lng]));
             if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
@@ -135,22 +137,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const buscarOcorrencias = async () => {
         showSpinner();
-        
-        // CORREÇÃO: Lê o valor da caixa de busca principal
         const termoBusca = geralSearchInput.value;
-
         const params = new URLSearchParams({
             periodo: selectPeriodo.value || 'last_quarter',
             ...(selectRegiao.value && { regiao: selectRegiao.value }),
             ...(selectMunicipio.value && { municipio: selectMunicipio.value }),
             ...(selectBairro.value && { bairro: selectBairro.value }),
             ...(selectCriminalidade.value && { delito: selectCriminalidade.value }),
-            // CORREÇÃO: Adiciona o termo de busca aos parâmetros se ele existir
             ...(termoBusca && { termo_busca: termoBusca })
         });
-        
         const isFilteredSearch = termoBusca || selectRegiao.value || selectMunicipio.value || selectBairro.value || selectCriminalidade.value;
-
         try {
             const res = await fetch(`${API_BASE_URL}/ocorrencias?${params}`);
             if (!res.ok) throw new Error('Falha ao buscar ocorrências');
@@ -260,7 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- EVENTOS ---
     const initEventListeners = () => {
-        // CORREÇÃO: Lógica de filtros em cascata refeita para resetar corretamente
         selectRegiao.addEventListener('change', () => {
             const regiao = selectRegiao.value;
             selectMunicipio.innerHTML = '<option value="">-- Carregando... --</option>';
@@ -274,7 +269,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // CORREÇÃO: Lógica de filtros em cascata refeita para resetar corretamente
         selectMunicipio.addEventListener('change', () => {
             const municipio = selectMunicipio.value;
             selectBairro.innerHTML = '<option value="">-- Carregando... --</option>';
@@ -289,8 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
         geralSearchInput.addEventListener('keyup', e => { if (e.key === 'Enter') btnBuscar.click(); });
         btnBuscar.addEventListener('click', buscarOcorrencias);
 
-        // CORREÇÃO: Lógica do botão Limpar refeita para resetar a visão do mapa
+        // <-- CORREÇÃO APLICADA AQUI
         btnLimpar.addEventListener('click', () => {
+            // 1. Limpa todos os campos de input e filtros
             geralSearchInput.value = '';
             selectPeriodo.value = 'last_quarter';
             selectRegiao.value = '';
@@ -298,10 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
             selectBairro.value = '';
             selectCriminalidade.value = '';
             
-            // Reseta a visão do mapa para a configuração inicial
+            // 2. Reseta a visão do mapa para a configuração inicial EXPLICITAMENTE
             map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
 
-            // Busca os dados iniciais (sem filtros)
+            // 3. Busca os dados iniciais (sem filtros)
             buscarOcorrencias();
         });
 
