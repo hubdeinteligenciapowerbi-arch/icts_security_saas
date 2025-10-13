@@ -20,7 +20,7 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
-api_key = "AIzaSyCqrRwS_o3riYOrXRp6_RuAxMNJSo-31dQ"
+api_key = os.getenv("key")
 
 API_REGIOES_URL = "https://ssp.sp.gov.br/v1/Regioes/RecuperaRegioes"
 
@@ -210,7 +210,8 @@ class InsightsRequest(BaseModel):
     bairro: Optional[str] = None
     delito: Optional[str] = None
 
-def get_filtered_data(periodo, regiao, municipio, bairro, delito):
+# <-- MUDANÇA 1: Adicionado o parâmetro 'termo_busca' na função
+def get_filtered_data(periodo, regiao, municipio, bairro, delito, termo_busca):
     df_filtrado = DF_GLOBAL.copy()
 
     if not df_filtrado.empty and pd.api.types.is_datetime64_any_dtype(df_filtrado['data_registro']):
@@ -225,6 +226,10 @@ def get_filtered_data(periodo, regiao, municipio, bairro, delito):
     elif periodo == 'all_2025':
         df_filtrado = df_filtrado[df_filtrado['ano'] == 2025]
     
+    # <-- MUDANÇA 2: Adicionada a lógica de filtro por termo de busca no bairro
+    if termo_busca and termo_busca.lower() != 'string':
+        df_filtrado = df_filtrado[df_filtrado["bairro"].str.contains(normalizar_str(termo_busca), case=False, na=False)]
+
     if regiao and regiao.lower() != 'string':
         df_filtrado = df_filtrado[df_filtrado["regiao"] == normalizar_str(regiao)]
     if municipio and municipio.lower() != 'string':
@@ -242,101 +247,9 @@ def root():
 
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
-    logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
-    if not api_key or "SUA_API_KEY" in api_key:
-        raise HTTPException(status_code=500, detail="API Key do Gemini não configurada.")
-    
-    response = None 
-    
-    try:
-        df_filtrado = get_filtered_data(request.periodo, request.regiao, request.municipio, request.bairro, request.delito)
-
-        if df_filtrado.empty:
-            return {
-                "quantidade_total": 0,
-                "detalhamento_ocorrencias": [], 
-                "analise_curta": "Não há ocorrências para os filtros selecionados.",
-                "recomendacao_curta": "Ajuste os filtros para uma nova busca."
-            }
-
-        total = len(df_filtrado)
-        resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
-        detalhamento_lista = [{"tipo": crime.replace('_', ' ').title(), "quantidade": qtd} for crime, qtd in resumo_delitos.items()]
-        
-        local = "a localidade selecionada"
-        if request.bairro and request.bairro.lower() != 'string':
-            local = f"o bairro {request.bairro.title()}"
-        elif request.municipio and request.municipio.lower() != 'string':
-            local = f"o município de {request.municipio.title()}"
-        elif request.regiao and request.regiao.lower() != 'string':
-            local = f"a região de {request.regiao.title()}"
-
-        periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
-        periodo_str = periodo_map.get(request.periodo, "período")
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        
-        prompt = (
-            "Aja como um analista de segurança pública. Com base nos dados a seguir, gere um objeto JSON contendo apenas duas chaves: 'analise_curta' e 'recomendacao_curta'. "
-            "Sua resposta DEVE ser apenas o objeto JSON, sem nenhum texto ou formatação adicional.\n\n"
-            "## DADOS PARA ANÁLISE:\n"
-            f"- Local: {local}\n"
-            f"- Período: {periodo_str}\n"
-            f"- Total de Ocorrências: {total}\n"
-            f"- Detalhamento dos Delitos: {json.dumps(detalhamento_lista, ensure_ascii=False)}\n\n"
-            "## FORMATO DE SAÍDA ESPERADO (APENAS O JSON):\n"
-            "{\n"
-            '  "analise_curta": "Gere uma análise de uma frase sobre o cenário criminal, destacando o principal delito.",\n'
-            '  "recomendacao_curta": "Gere uma recomendação de segurança de uma frase, curta e acionável para os cidadãos."\n'
-            "}"
-        )
-        
-        body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.6, "maxOutputTokens": 1024, "response_mime_type": "application/json",
-            }
-        }
-
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
-        response.raise_for_status()
-        
-        data = response.json()
-        candidates = data.get("candidates")
-
-        if not candidates:
-            feedback = data.get("promptFeedback", {})
-            raise ValueError(f"A resposta da API do Gemini não retornou 'candidates'. Causa provável: {feedback}")
-
-        content = candidates[0].get("content", {}).get("parts", [{}])[0]
-        result_json_text = content.get("text")
-        
-        if not result_json_text:
-            raise ValueError("Não foi encontrado texto na resposta da API do Gemini.")
-        
-        analise_parcial = json.loads(result_json_text)
-        
-        resposta_final = {
-            "quantidade_total": total,
-            "detalhamento_ocorrencias": detalhamento_lista,
-            "analise_curta": analise_parcial.get("analise_curta", "Análise não pôde ser gerada."),
-            "recomendacao_curta": analise_parcial.get("recomendacao_curta", "Recomendação não pôde ser gerada.")
-        }
-        
-        return resposta_final
-
-    except Exception as e:
-        logging.error(f"Ocorreu um erro inesperado: {str(e)}")
-        
-        if response is not None:
-            logging.error(f"Resposta da API (status {response.status_code}): {response.text}")
-        
-        logging.error(traceback.format_exc())
-        
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")
+    # ... (código desta função permanece o mesmo)
+    # ... (código omitido por brevidade, pois não muda)
+    pass # Remova o 'pass' e mantenha o código original aqui
 
 @app.get("/api/ocorrencias")
 def ocorrencias(
@@ -344,10 +257,12 @@ def ocorrencias(
     municipio: str = Query(None), 
     regiao: str = Query(None), 
     bairro: str = Query(None),
-    delito: str = Query(None)
+    delito: str = Query(None),
+    termo_busca: str = Query(None)  # <-- MUDANÇA 3: Endpoint aceita o novo parâmetro
 ):
     try:
-        df_filtrado = get_filtered_data(periodo, regiao, municipio, bairro, delito)
+        # <-- MUDANÇA 4: Passa o novo parâmetro para a função de filtro
+        df_filtrado = get_filtered_data(periodo, regiao, municipio, bairro, delito, termo_busca)
         
         if not any([f for f in [municipio, regiao, bairro, delito] if f and f.lower() != 'string']) and len(df_filtrado) > 5000:
             df_filtrado = df_filtrado.sample(n=5000, random_state=42)
