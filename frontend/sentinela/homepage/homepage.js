@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURAÇÃO ---
     const IS_LOCAL = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
-    const API_BASE_URL = IS_LOCAL ? "http://127.0.0.1:8000/api" : "/api";
+    const API_BASE_URL = IS_LOCAL ? "http://127.0.0.1:8080/api" : "/api";
     const SAO_PAULO_VIEW = { center: [-22.19, -48.79], zoom: 7 };
 
     // --- VARIÁVEIS ---
@@ -69,7 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!geojson?.features?.length) {
             dadosSegurancaDiv.innerHTML = '<p class="text-muted text-center">Nenhum dado encontrado.</p>';
-            if (!isFiltered) map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+            if (!isFiltered) {
+                map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+            }
             return;
         }
 
@@ -110,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         select.innerHTML = `<option>A carregar...</option>`;
         try {
             const res = await fetch(`${API_BASE_URL}${endpoint}`);
+            if (!res.ok) throw new Error('Falha na resposta da rede');
             const { data } = await res.json();
             select.innerHTML = `<option value="">-- ${placeholder} --</option>`;
             if (data?.length) {
@@ -124,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 select.innerHTML = `<option>Nenhum dado</option>`;
             }
-        } catch {
+        } catch (err) {
             showInfo(`Erro ao carregar ${placeholder}`, 'danger');
             select.innerHTML = `<option>Erro</option>`;
         }
@@ -132,17 +135,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const buscarOcorrencias = async () => {
         showSpinner();
+        
+        // CORREÇÃO: Lê o valor da caixa de busca principal
+        const termoBusca = geralSearchInput.value;
+
         const params = new URLSearchParams({
             periodo: selectPeriodo.value || 'last_quarter',
             ...(selectRegiao.value && { regiao: selectRegiao.value }),
             ...(selectMunicipio.value && { municipio: selectMunicipio.value }),
             ...(selectBairro.value && { bairro: selectBairro.value }),
-            ...(selectCriminalidade.value && { delito: selectCriminalidade.value })
+            ...(selectCriminalidade.value && { delito: selectCriminalidade.value }),
+            // CORREÇÃO: Adiciona o termo de busca aos parâmetros se ele existir
+            ...(termoBusca && { termo_busca: termoBusca })
         });
+        
+        const isFilteredSearch = termoBusca || selectRegiao.value || selectMunicipio.value || selectBairro.value || selectCriminalidade.value;
+
         try {
             const res = await fetch(`${API_BASE_URL}/ocorrencias?${params}`);
+            if (!res.ok) throw new Error('Falha ao buscar ocorrências');
             const data = await res.json();
-            renderDataOnMap(data.geojson, params.size > 1);
+            renderDataOnMap(data.geojson, isFilteredSearch);
         } catch (err) {
             showInfo(`Erro: ${err.message}`, 'danger');
         } finally {
@@ -150,13 +163,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- INSIGHTS (NOVA LÓGICA) ---
+    // --- INSIGHTS ---
     const popularInsightsPanel = (data) => {
         if (!data || data.quantidade_total === undefined) {
             insightsContent.innerHTML = `<div class="alert alert-warning">Não foi possível carregar os insights.</div>`;
             return;
         }
-
         if (data.quantidade_total === 0) {
             insightsContent.innerHTML = `
                 <div class="insights-header"><h5>Ocorrências: 0</h5></div>
@@ -166,20 +178,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             return;
         }
-
         const sortedCrimes = [...data.detalhamento_ocorrencias].sort((a, b) => b.quantidade - a.quantidade);
-        const top10Crimes = sortedCrimes.slice(0, 5);
+        const top10Crimes = sortedCrimes.slice(0, 10);
         const otherCrimes = sortedCrimes.slice(10);
-
         const createListItemHTML = crime => `
             <li class="crime-item">
                 <span class="crime-name">${crime.tipo}</span>
                 <span class="crime-quantity">${crime.quantidade.toLocaleString('pt-BR')}</span>
             </li>`;
-
         const top10Html = top10Crimes.map(createListItemHTML).join('');
         const otherHtml = otherCrimes.map(createListItemHTML).join('');
-
         insightsContent.innerHTML = `
             <div class="insights-header">
                 <h5>Ocorrências: ${data.quantidade_total.toLocaleString('pt-BR')}</h5>
@@ -197,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p><b>Recomendação:</b> ${data.recomendacao_curta}</p>
             </div>
         `;
-
         if (otherCrimes.length > 0) {
             const toggleButton = document.getElementById('toggle-more-crimes');
             const moreContainer = document.getElementById('more-crimes-container');
@@ -213,6 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
         insightsContent.innerHTML = '<div class="text-center p-3">Aguarde, gerando análise...</div>';
         insightsMessage.classList.remove('d-none');
         showSpinner();
+        btnInsights.disabled = true;
         try {
             const res = await fetch(`${API_BASE_URL}/insights`, {
                 method: 'POST',
@@ -230,11 +238,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorData.detail || 'Erro na comunicação com o servidor.');
             }
             const data = await res.json();
-            popularInsightsPanel(data); // Chama a nova função para renderizar o painel
+            popularInsightsPanel(data);
         } catch (err) {
             insightsContent.innerHTML = `<div class="alert alert-danger">Erro ao gerar análise: ${err.message}</div>`;
         } finally {
             hideSpinner();
+            btnInsights.disabled = false;
         }
     };
 
@@ -242,52 +251,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleMenu = () => {
         const mapControls = document.getElementById("map-view-controls");
         const isMobile = window.innerWidth <= 992;
-
         mainMenu.classList.toggle("open");
         hamburgerBtn.classList.toggle("active");
-
         if (isMobile) {
-            if (mainMenu.classList.contains("open")) {
-                mapControls.style.display = "none";
-            } else {
-                mapControls.style.display = "block";
-            }
-        }
-    };
-
-    const closeMenuOnFilterClick = () => {
-        if (window.innerWidth <= 992 && mainMenu.classList.contains("open")) {
-            toggleMenu();
+            mapControls.style.display = mainMenu.classList.contains("open") ? "none" : "block";
         }
     };
 
     // --- EVENTOS ---
     const initEventListeners = () => {
+        // CORREÇÃO: Lógica de filtros em cascata refeita para resetar corretamente
         selectRegiao.addEventListener('change', () => {
-            fetchAndPopulate(`/municipios?regiao=${selectRegiao.value}`, selectMunicipio, 'Municípios');
-            selectBairro.innerHTML = '<option value="">-- Bairros --</option>';
+            const regiao = selectRegiao.value;
+            selectMunicipio.innerHTML = '<option value="">-- Carregando... --</option>';
+            selectMunicipio.disabled = true;
+            selectBairro.innerHTML = '<option value="">-- Selecione um Município --</option>';
+            selectBairro.disabled = true;
+            if (regiao) {
+                fetchAndPopulate(`/municipios?regiao=${regiao}`, selectMunicipio, 'Municípios');
+            } else {
+                fetchAndPopulate(`/municipios`, selectMunicipio, 'Municípios');
+            }
         });
 
+        // CORREÇÃO: Lógica de filtros em cascata refeita para resetar corretamente
         selectMunicipio.addEventListener('change', () => {
-            fetchAndPopulate(`/bairros?municipio=${selectMunicipio.value}`, selectBairro, 'Bairros');
+            const municipio = selectMunicipio.value;
+            selectBairro.innerHTML = '<option value="">-- Carregando... --</option>';
+            selectBairro.disabled = true;
+            if (municipio) {
+                fetchAndPopulate(`/bairros?municipio=${municipio}`, selectBairro, 'Bairros');
+            } else {
+                fetchAndPopulate(`/bairros`, selectBairro, 'Bairros');
+            }
         });
 
-        geralSearchInput.addEventListener('keyup', e => { if (e.key === 'Enter') buscarOcorrencias(); });
+        geralSearchInput.addEventListener('keyup', e => { if (e.key === 'Enter') btnBuscar.click(); });
         btnBuscar.addEventListener('click', buscarOcorrencias);
 
+        // CORREÇÃO: Lógica do botão Limpar refeita para resetar a visão do mapa
         btnLimpar.addEventListener('click', () => {
+            geralSearchInput.value = '';
             selectPeriodo.value = 'last_quarter';
             selectRegiao.value = '';
-            selectMunicipio.innerHTML = '<option value="">-- Municípios --</option>';
-            selectBairro.innerHTML = '<option value="">-- Bairros --</option>';
+            selectMunicipio.value = '';
+            selectBairro.value = '';
             selectCriminalidade.value = '';
-            buscarOcorrencias();
-
-            if (userLocationMarker) {
-                map.removeLayer(userLocationMarker);
-                userLocationMarker = null;
-            }
+            
+            // Reseta a visão do mapa para a configuração inicial
             map.setView(SAO_PAULO_VIEW.center, SAO_PAULO_VIEW.zoom);
+
+            // Busca os dados iniciais (sem filtros)
+            buscarOcorrencias();
         });
 
         btnInsights.addEventListener('click', buscarInsights);
@@ -295,37 +310,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
         viewToggleBtn.addEventListener('click', () => {
             currentView = currentView === 'bubbles' ? 'heatmap' : 'bubbles';
+            viewIcon.className = currentView === 'bubbles' ? 'fas fa-fire' : 'fas fa-circle';
+            viewText.textContent = currentView === 'bubbles' ? 'Mapa de Calor' : 'Ocorrências';
             renderDataOnMap(lastGeoJsonData, true);
         });
 
         darkModeToggle.addEventListener('click', toggleDarkMode);
 
-        btnLocalizacao.addEventListener('click', () => navigator.geolocation.getCurrentPosition(p => {
-            const { latitude, longitude } = p.coords;
-            if (userLocationMarker) map.removeLayer(userLocationMarker);
-            map.setView([latitude, longitude], 15);
-            userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
-        }));
+        btnLocalizacao.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showInfo('Geolocalização não é suportada pelo seu navegador.', 'warning');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(p => {
+                const { latitude, longitude } = p.coords;
+                if (userLocationMarker) map.removeLayer(userLocationMarker);
+                map.setView([latitude, longitude], 15);
+                userLocationMarker = L.marker([latitude, longitude]).addTo(map).bindPopup("Você está aqui!").openPopup();
+            }, () => {
+                showInfo('Não foi possível obter sua localização.', 'danger');
+            });
+        });
 
         hamburgerBtn.addEventListener('click', toggleMenu);
     };
 
     // --- INICIALIZAÇÃO ---
     const initApp = async () => {
-        inicializarMapa();
-        initEventListeners();
-
+        showSpinner();
         await Promise.all([
             fetchAndPopulate('/regioes', selectRegiao, 'Delegacias'),
             fetchAndPopulate('/municipios', selectMunicipio, 'Municípios'),
             fetchAndPopulate('/bairros', selectBairro, 'Bairros'),
             fetchAndPopulate('/delitos', selectCriminalidade, 'Crimes')
         ]);
-
-        buscarOcorrencias();
-
-        if (localStorage.getItem('darkMode') === 'enabled') toggleDarkMode();
+        await buscarOcorrencias();
+        hideSpinner();
     };
 
+    if (localStorage.getItem('darkMode') === 'enabled') {
+        document.body.classList.add('dark-mode');
+        darkModeToggle.textContent = '☀️';
+    }
+
+    inicializarMapa();
+    initEventListeners();
     initApp();
 });
