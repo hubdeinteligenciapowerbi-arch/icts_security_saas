@@ -67,4 +67,3 @@ Obs: Todas às rotas estão disponíveis no swagger -> url + /docs
 ## 📄 Licença
 
 Este projeto está licenciado sob a MIT License — consulte o arquivo LICENSE para detalhes.
->>>>>>> 9fdef421bd2717c09151c0f2d735fea7a5424185
