@@ -247,9 +247,112 @@ def root():
 
 @app.post("/api/insights")
 def get_insights(request: InsightsRequest):
-    # ... (código desta função permanece o mesmo)
-    # ... (código omitido por brevidade, pois não muda)
-    pass # Remova o 'pass' e mantenha o código original aqui
+    logging.info(f"Requisição para /api/insights com filtros: {request.dict()}")
+    if not api_key:
+        logging.error("A variável de ambiente com a API Key do Gemini não foi encontrada ou está vazia.")
+        raise HTTPException(status_code=500, detail="API Key do Gemini não configurada no servidor.")
+    
+    response = None 
+    
+    try:
+        df_filtrado = get_filtered_data(
+            request.periodo, 
+            request.regiao, 
+            request.municipio, 
+            request.bairro, 
+            request.delito, 
+            None  
+        )
+
+        if df_filtrado.empty:
+            return {
+                "quantidade_total": 0,
+                "detalhamento_ocorrencias": [], 
+                "analise_curta": "Não há ocorrências para os filtros selecionados.",
+                "recomendacao_curta": "Ajuste os filtros para uma nova busca ou amplie o período."
+            }
+
+        total = len(df_filtrado)
+        resumo_delitos = df_filtrado['delito'].value_counts().to_dict()
+        detalhamento_lista = [{"tipo": crime.replace('_', ' ').title(), "quantidade": qtd} for crime, qtd in resumo_delitos.items()]
+        
+        local = "a localidade selecionada"
+        if request.bairro and request.bairro.lower() != 'string':
+            local = f"o bairro {request.bairro.title()}"
+        elif request.municipio and request.municipio.lower() != 'string':
+            local = f"o município de {request.municipio.title()}"
+        elif request.regiao and request.regiao.lower() != 'string':
+            local = f"a região de {request.regiao.title()}"
+
+        periodo_map = {"last_30_days": "últimos 30 dias", "last_quarter": "último trimestre", "all_2025": "ano de 2025"}
+        periodo_str = periodo_map.get(request.periodo, "período")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        
+        prompt = (
+            "Aja como um analista de segurança pública. Com base nos dados a seguir, gere um objeto JSON contendo apenas duas chaves: 'analise_curta' e 'recomendacao_curta'. "
+            "Sua resposta DEVE ser apenas o objeto JSON, sem nenhum texto ou formatação adicional como '```json'.\n\n"
+            "## DADOS PARA ANÁLISE:\n"
+            f"- Local: {local}\n"
+            f"- Período: {periodo_str}\n"
+            f"- Total de Ocorrências: {total}\n"
+            f"- Detalhamento dos Delitos (Top 5): {json.dumps(detalhamento_lista[:5], ensure_ascii=False)}\n\n"
+            "## FORMATO DE SAÍDA ESPERADO (APENAS O JSON):\n"
+            "{\n"
+            '  "analise_curta": "Gere uma análise de uma frase sobre o cenário criminal, destacando o principal delito.",\n'
+            '  "recomendacao_curta": "Gere uma recomendação de segurança de uma frase, curta e acionável para os cidadãos."\n'
+            "}"
+        )
+        
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.6, "maxOutputTokens": 1024, "response_mime_type": "application/json",
+            }
+        }
+
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, data=json.dumps(body), timeout=180)
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        candidates = data.get("candidates")
+
+        if not candidates:
+            feedback = data.get("promptFeedback", {})
+            logging.error(f"A API do Gemini bloqueou o prompt ou retornou sem candidatos. Feedback: {feedback}")
+            raise ValueError(f"A resposta da API do Gemini não retornou 'candidates'. Causa provável: {feedback}")
+
+        content = candidates[0].get("content", {}).get("parts", [{}])[0]
+        result_json_text = content.get("text")
+        
+        if not result_json_text:
+            raise ValueError("Não foi encontrado texto na resposta da API do Gemini.")
+        
+        analise_parcial = json.loads(result_json_text)
+        
+        resposta_final = {
+            "quantidade_total": total,
+            "detalhamento_ocorrencias": detalhamento_lista,
+            "analise_curta": analise_parcial.get("analise_curta", "Análise não pôde ser gerada."),
+            "recomendacao_curta": analise_parcial.get("recomendacao_curta", "Recomendação não pôde ser gerada.")
+        }
+        
+        return resposta_final
+
+    except Exception as e:
+        logging.error(f"Ocorreu um erro inesperado no endpoint de insights: {str(e)}")
+        
+        if response is not None:
+            logging.error(f"Resposta da API do Gemini (status {response.status_code}): {response.text}")
+        
+        logging.error(traceback.format_exc())
+        
+        if isinstance(e, HTTPException):
+            raise e
+ 
+        raise HTTPException(status_code=500, detail=f"Erro interno ao gerar análise: {str(e)}")
 
 @app.get("/api/ocorrencias")
 def ocorrencias(

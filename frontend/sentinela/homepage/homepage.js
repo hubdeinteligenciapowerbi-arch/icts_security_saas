@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const sortedCrimes = [...data.detalhamento_ocorrencias].sort((a, b) => b.quantidade - a.quantidade);
-        const top10Crimes = sortedCrimes.slice(0, 10);
+        const top10Crimes = sortedCrimes.slice(0, 5);
         const otherCrimes = sortedCrimes.slice(10);
         const createListItemHTML = crime => `
             <li class="crime-item">
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h5>Ocorrências: ${data.quantidade_total.toLocaleString('pt-BR')}</h5>
             </div>
             <div class="insights-body">
-                <h6 class="top-crimes-title">Principais Ocorrências (Top 10)</h6>
+                <h6 class="top-crimes-title">Principais Ocorrências (Top 5)</h6>
                 <ul class="crime-list">${top10Html}</ul>
                 ${otherCrimes.length > 0 ? `<button id="toggle-more-crimes">Ver Mais (${otherCrimes.length})</button>` : ''}
                 <div class="more-crimes-container" id="more-crimes-container">
