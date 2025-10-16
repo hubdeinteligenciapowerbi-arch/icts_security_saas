@@ -37,8 +37,7 @@ def normalizar_str(s: str) -> str:
 
 def carregar_e_preparar_dados():
     logging.info("--- EXECUTANDO VERSÃO PÚBLICA (DOWNLOAD EXTERNO SIMPLES) ---")
-    
-    CSV_URL = "https://github.com/DaviEmmerick/icts_security/releases/download/v1-data/dados.csv"
+    CSV_URL = "https://github.com/hubdeinteligenciapowerbi-arch/icts_security_saas/releases/download/v1-data/dados.csv"
     
     temp_dir = tempfile.gettempdir()
     csv_path = os.path.join(temp_dir, "dados.csv")
