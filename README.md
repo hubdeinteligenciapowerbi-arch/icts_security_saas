@@ -51,7 +51,7 @@ docker-compose up --build
 ```
 5.2 Sem utilizar o Docker
 ```
-uvicorn app.main:app --reload  # exemplo com FastAPI
+uvicorn main:app --reload  # exemplo com FastAPI
 cd frontend && npm install && npm run serve (Recomendado: Extensão Live Server)
 ```
 ## 🧭 Rotas / Endpoints Exemplos
